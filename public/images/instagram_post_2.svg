@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="igGlow2" cx="60%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#151520"/>
+      <stop offset="100%" stop-color="#0b0b0f"/>
+    </radialGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#igGlow2)"/>
+  <!-- Podcast Mic & Sound Waves -->
+  <g transform="translate(230, 160)">
+    <circle cx="70" cy="100" r="80" fill="rgba(255,90,31,0.15)" filter="blur(10px)"/>
+    <rect x="50" y="50" width="40" height="80" rx="20" fill="#181824" stroke="#ff5a1f" stroke-width="3"/>
+    <line x1="70" y1="130" x2="70" y2="230" stroke="#a1a1aa" stroke-width="6" stroke-linecap="round"/>
+    <circle cx="70" cy="90" r="10" fill="#ff5a1f"/>
+    <!-- Sound Waves around mic -->
+    <path d="M20 70 A 50 50 0 0 0 20 110" stroke="#6366f1" stroke-width="3" fill="none"/>
+    <path d="M120 70 A 50 50 0 0 1 120 110" stroke="#6366f1" stroke-width="3" fill="none"/>
+  </g>
+  <rect x="24" y="24" width="140" height="28" rx="6" fill="rgba(0,0,0,0.6)" stroke="rgba(255,255,255,0.15)"/>
+  <text x="94" y="42" font-family="'Space Grotesk', sans-serif" font-size="11" font-weight="700" fill="#6366f1" text-anchor="middle">PODCAST KAYDI</text>
+</svg>

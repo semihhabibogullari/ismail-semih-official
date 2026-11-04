@@ -1,0 +1,148 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  :root {
+    --bg-primary: #0b0b0f;
+    --bg-secondary: #121218;
+    --bg-panel: #151520;
+    --accent: #ff5a1f;
+    --text-primary: #f1f1f4;
+    --text-secondary: #9ca3af;
+    --heading-font: 'Space Grotesk', system-ui, sans-serif;
+    --body-font: 'Inter', system-ui, sans-serif;
+  }
+
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--body-font);
+    overflow-x: hidden;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--heading-font);
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Light Mode Overrides */
+html.light {
+  --bg-primary: #f8f8fa;
+  --bg-secondary: #ffffff;
+  --bg-panel: #f1f1f6;
+  --accent: #ff5a1f;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+}
+
+html.light body {
+  background-color: #f8f8fa !important;
+  color: #0f172a !important;
+}
+
+html.light .bg-\[\#0b0b0f\] {
+  background-color: #f8f8fa !important;
+}
+
+html.light .bg-\[\#121218\] {
+  background-color: #ffffff !important;
+}
+
+html.light .bg-\[\#151520\] {
+  background-color: #f4f4f7 !important;
+}
+
+html.light .bg-\[\#181824\] {
+  background-color: #ebebef !important;
+}
+
+html.light .border-white\/10 {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+
+html.light .border-white\/5 {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+html.light .text-white {
+  color: #0f172a !important;
+}
+
+html.light .text-\[\#f1f1f4\] {
+  color: #0f172a !important;
+}
+
+html.light .text-gray-200 {
+  color: #1e293b !important;
+}
+
+html.light .text-gray-300 {
+  color: #334155 !important;
+}
+
+html.light .text-gray-400 {
+  color: #64748b !important;
+}
+
+html.light .text-gray-500 {
+  color: #94a3b8 !important;
+}
+
+html.light .bg-white\/5 {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+}
+
+html.light .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.07) !important;
+}
+
+html.light .bg-white\/15 {
+  background-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+html.light .hover\:text-white:hover {
+  color: #000000 !important;
+}
+
+html.light .hover\:bg-white\/10:hover {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+html.light .hover\:bg-white\/5:hover {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: #2b2b3d;
+  border-radius: 4px;
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #ff5a1f;
+}
+
+/* Ken Burns subtle cinematic zoom */
+@keyframes kenburnsZoom {
+  0% {
+    transform: scale(1.0);
+  }
+  100% {
+    transform: scale(1.08);
+  }
+}
+
+.animate-kenburns {
+  animation: kenburnsZoom 7s ease-out forwards;
+}

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="hlGrad1" cx="40%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#ff5a1f" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#121218"/>
+      <stop offset="100%" stop-color="#0b0b0f"/>
+    </radialGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#hlGrad1)"/>
+  <rect x="24" y="24" width="752" height="552" rx="16" fill="none" stroke="rgba(255,255,255,0.08)"/>
+  <!-- Stage spotlight and silhouette -->
+  <path d="M400 60 L 320 480 L 480 480 Z" fill="rgba(255,90,31,0.12)"/>
+  <circle cx="400" cy="280" r="18" fill="#f1f1f4"/>
+  <path d="M385 305 L 415 305 L 425 420 L 375 420 Z" fill="#151520" stroke="#ff5a1f" stroke-width="2"/>
+  <text x="400" y="520" font-family="'Space Grotesk', sans-serif" font-weight="700" font-size="22" fill="#f1f1f4" text-anchor="middle">KARANLIKTA KOMEDİ</text>
+  <text x="400" y="550" font-family="'Inter', sans-serif" font-size="14" fill="#a1a1aa" text-anchor="middle">SAHNE PLASTİSİ VE IŞIK REJİSİ</text>
+</svg>

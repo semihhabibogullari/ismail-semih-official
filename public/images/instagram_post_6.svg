@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="igGlow6" cx="50%" cy="50%" r="65%">
+      <stop offset="0%" stop-color="#ff5a1f" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#151520"/>
+      <stop offset="100%" stop-color="#0b0b0f"/>
+    </radialGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#igGlow6)"/>
+  <!-- Curtain Call & Bowing actor -->
+  <g transform="translate(180, 160)">
+    <circle cx="120" cy="120" r="30" fill="#f1f1f4"/>
+    <path d="M70 200 C 70 160, 170 160, 170 200 L 190 320 L 50 320 Z" fill="#181824" stroke="#ff5a1f" stroke-width="2"/>
+    <path d="M60 210 Q 120 240, 180 210" stroke="#ff8c42" stroke-width="4" fill="none"/>
+  </g>
+  <!-- Curtains on sides -->
+  <path d="M0 0 C 80 150, 40 400, 80 600 L 0 600 Z" fill="#1e1214" stroke="#ff5a1f" stroke-width="1"/>
+  <path d="M600 0 C 520 150, 560 400, 520 600 L 600 600 Z" fill="#1e1214" stroke="#ff5a1f" stroke-width="1"/>
+  <rect x="24" y="24" width="140" height="28" rx="6" fill="rgba(0,0,0,0.6)" stroke="rgba(255,255,255,0.15)"/>
+  <text x="94" y="42" font-family="'Space Grotesk', sans-serif" font-size="11" font-weight="700" fill="#ff5a1f" text-anchor="middle">PERDE &amp; ALKIŞ</text>
+  <!-- Reels icon -->
+  <circle cx="560" cy="38" r="16" fill="rgba(0,0,0,0.6)" stroke="#ff5a1f"/>
+  <polygon points="556,31 567,38 556,45" fill="#f1f1f4"/>
+</svg>

@@ -1,0 +1,6 @@
+{
+  "name": "İsmail Semih Habiboğulları",
+  "description": "Tiyatro sanatçısı, yönetmen, eğitmen, sunucu ve içerik üreticisi İsmail Semih Habiboğulları'nın resmi web sitesi ve dijital sanat merkezi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

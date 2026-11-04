@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="100%" height="100%">
+  <defs>
+    <radialGradient id="igGlow1" cx="40%" cy="40%" r="65%">
+      <stop offset="0%" stop-color="#ff5a1f" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#151520"/>
+      <stop offset="100%" stop-color="#0b0b0f"/>
+    </radialGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#igGlow1)"/>
+  <!-- Theatrical Rehearsal silhouettes -->
+  <g transform="translate(100, 140)">
+    <circle cx="160" cy="100" r="28" fill="#f1f1f4"/>
+    <path d="M120 220 L 160 140 L 200 220 Z" fill="#1e1e2d" stroke="#ff5a1f" stroke-width="2"/>
+    <line x1="80" y1="180" x2="240" y2="180" stroke="#ff8c42" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="280" cy="120" r="24" fill="#a1a1aa"/>
+    <path d="M250 220 L 280 155 L 310 220 Z" fill="#181822"/>
+  </g>
+  <!-- Stage floor grid -->
+  <line x1="40" y1="440" x2="560" y2="440" stroke="rgba(255,255,255,0.1)" stroke-width="1.5"/>
+  <line x1="40" y1="500" x2="560" y2="500" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+  <!-- Post badge -->
+  <rect x="24" y="24" width="120" height="28" rx="6" fill="rgba(0,0,0,0.6)" stroke="rgba(255,255,255,0.15)"/>
+  <text x="84" y="42" font-family="'Space Grotesk', sans-serif" font-size="11" font-weight="700" fill="#ff5a1f" text-anchor="middle">PROVA GÜNLÜĞÜ</text>
+  <!-- Reels icon top right -->
+  <circle cx="560" cy="38" r="16" fill="rgba(0,0,0,0.6)" stroke="#ff5a1f"/>
+  <polygon points="556,31 567,38 556,45" fill="#f1f1f4"/>
+</svg>

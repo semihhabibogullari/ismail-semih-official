@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 80" fill="none">
+  <defs>
+    <linearGradient id="orangeGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ff5a1f"/>
+      <stop offset="100%" stop-color="#ff8c42"/>
+    </linearGradient>
+  </defs>
+  <!-- Stylized Monogram / Theatrical Arch Emblem -->
+  <g transform="translate(10, 10)">
+    <rect x="0" y="2" width="56" height="56" rx="14" fill="#151520" stroke="#ff5a1f" stroke-width="2.5"/>
+    <!-- Stage spotlight / arch motif -->
+    <path d="M12 48 C 12 24, 44 24, 44 48" stroke="url(#orangeGrad)" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <circle cx="28" cy="22" r="5" fill="#ff5a1f"/>
+    <path d="M22 36 L 28 30 L 34 36" stroke="#f1f1f4" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <!-- Typographic Wordmark -->
+  <g transform="translate(80, 20)">
+    <!-- Line 1: İSMAİL SEMİH -->
+    <text x="0" y="20" font-family="'Space Grotesk', 'Inter', sans-serif" font-weight="700" font-size="21" fill="#f1f1f4" letter-spacing="4.5">
+      İSMAİL SEMİH
+    </text>
+    <!-- Line 2: HABİBOĞULLARI -->
+    <text x="0" y="42" font-family="'Space Grotesk', 'Inter', sans-serif" font-weight="600" font-size="14" fill="#ff5a1f" letter-spacing="7.5">
+      HABİBOĞULLARI
+    </text>
+  </g>
+  <!-- Subtle minimalist accent divider -->
+  <line x1="480" y1="24" x2="480" y2="56" stroke="rgba(255,255,255,0.15)" stroke-width="1.5"/>
+  <circle cx="500" cy="40" r="3.5" fill="#ff5a1f"/>
+</svg>

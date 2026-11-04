@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="100%" height="100%">
+  <defs>
+    <radialGradient id="stageLight1" cx="35%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#ff5a1f" stop-opacity="0.45"/>
+      <stop offset="50%" stop-color="#2a1208" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#0b0b0f" stop-opacity="1"/>
+    </radialGradient>
+    <radialGradient id="stageSpot" cx="72%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.35"/>
+      <stop offset="60%" stop-color="#151520" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#0b0b0f" stop-opacity="1"/>
+    </radialGradient>
+    <linearGradient id="floorGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#181822"/>
+      <stop offset="100%" stop-color="#08080c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Deep cinematic stage canvas -->
+  <rect width="1200" height="400" fill="#0b0b0f"/>
+  <rect width="1200" height="400" fill="url(#stageLight1)"/>
+  <rect width="1200" height="400" fill="url(#stageSpot)"/>
+
+  <!-- Minimalist stage floor perspective lines -->
+  <g stroke="rgba(255,255,255,0.06)" stroke-width="1">
+    <line x1="200" y1="400" x2="550" y2="240"/>
+    <line x1="400" y1="400" x2="600" y2="240"/>
+    <line x1="600" y1="400" x2="650" y2="240"/>
+    <line x1="800" y1="400" x2="700" y2="240"/>
+    <line x1="1000" y1="400" x2="750" y2="240"/>
+    <line x1="100" y1="280" x2="1100" y2="280"/>
+    <line x1="50" y1="330" x2="1150" y2="330"/>
+  </g>
+
+  <!-- Overhead Theatrical Rig / Light Beams -->
+  <path d="M720 0 L 680 340 L 780 340 Z" fill="rgba(255, 90, 31, 0.12)" filter="blur(8px)"/>
+  <path d="M420 0 L 370 320 L 460 320 Z" fill="rgba(99, 102, 241, 0.08)" filter="blur(10px)"/>
+
+  <!-- Actor Silhouette in Dramatic Posture -->
+  <g transform="translate(710, 160)" fill="#09090d" stroke="rgba(255,90,31,0.6)" stroke-width="1.5">
+    <!-- Spotlight halo around actor -->
+    <ellipse cx="20" cy="180" rx="60" ry="12" fill="rgba(255,90,31,0.25)" filter="blur(6px)"/>
+    <!-- Head -->
+    <circle cx="20" cy="20" r="14" fill="#07070b"/>
+    <!-- Torso and coat -->
+    <path d="M6 35 C 10 32, 30 32, 34 35 L 42 95 L -2 95 Z" fill="#07070b"/>
+    <!-- Extended theatrical arm gesture -->
+    <path d="M34 42 Q 65 30, 80 18" stroke="#ff8c42" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+    <path d="M6 42 Q -15 55, -28 75" stroke="#ff5a1f" stroke-width="3" stroke-linecap="round" fill="none"/>
+    <!-- Legs in stance -->
+    <path d="M8 95 L 4 175 M 32 95 L 38 175" stroke="#0e0e14" stroke-width="8" stroke-linecap="round"/>
+  </g>
+
+  <!-- Geometric accent frame -->
+  <rect x="24" y="24" width="1152" height="352" rx="16" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="1"/>
+  <!-- Stage metadata corner tag -->
+  <text x="50" y="70" font-family="'Space Grotesk', sans-serif" font-size="12" font-weight="600" fill="#ff5a1f" letter-spacing="3">DASDAS &amp; MODA SAHNESİ REPERTUARI</text>
+  <text x="1150" y="70" font-family="'Space Grotesk', sans-serif" font-size="12" font-weight="500" fill="rgba(255,255,255,0.4)" text-anchor="end">2026 - 2027 SEZONU</text>
+</svg>

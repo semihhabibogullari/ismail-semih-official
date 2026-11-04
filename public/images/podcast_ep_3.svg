@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <rect width="500" height="500" fill="#121218"/>
+  <rect x="20" y="20" width="460" height="460" rx="16" fill="#151520" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+  <circle cx="250" cy="200" r="70" fill="none" stroke="#ff8c42" stroke-width="2.5"/>
+  <polygon points="240,180 270,200 240,220" fill="#ff5a1f"/>
+  <text x="250" y="340" font-family="'Space Grotesk', sans-serif" font-weight="700" font-size="20" fill="#f1f1f4" text-anchor="middle">BEN BİR İSMAİL</text>
+  <text x="250" y="375" font-family="'Space Grotesk', sans-serif" font-weight="600" font-size="16" fill="#ff8c42" text-anchor="middle">BÖLÜM #40</text>
+  <text x="250" y="415" font-family="'Inter', sans-serif" font-weight="400" font-size="13" fill="#a1a1aa" text-anchor="middle">REJİSÖRÜN GÖZÜ</text>
+</svg>
