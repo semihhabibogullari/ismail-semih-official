@@ -45,7 +45,7 @@ const INSTAGRAM_SECRET_FILE = path.resolve(DATA_DIR, 'instagram-secret.json');
 
 // Helper for atomic file write
 function safeWriteJson(filePath: string, data: any) {
-  const tempPath = `${filePath}.tmp.${Date.now()}`;
+  const tempPath = `${filePath}.tmp.${process.pid}.${crypto.randomBytes(6).toString('hex')}`;
   fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 });
   fs.renameSync(tempPath, filePath);
 }
@@ -109,7 +109,7 @@ function migrateSiteData(existing: any, defaults: SiteData): SiteData {
               ...existing.sections.slice(3),
             ].map((s: any, idx: number) => ({ ...s, order: idx + 1 })))
       : defaults.sections,
-    instagramPosts: existing.instagramPosts && existing.instagramPosts.length > 0
+    instagramPosts: Array.isArray(existing.instagramPosts)
       ? existing.instagramPosts
       : defaults.instagramPosts,
   };
@@ -467,7 +467,7 @@ app.get('/api/site/backups', requireAuth, (_req: Request, res: Response) => {
 
 app.post('/api/site/restore', requireAuth, (req: Request, res: Response) => {
   const { backupId } = req.body;
-  if (typeof backupId !== 'string' || !/^version_v\\d+_\\d+$/.test(backupId)) {
+  if (typeof backupId !== 'string' || !/^version_v\d+_\d+$/.test(backupId)) {
     return res.status(400).json({ error: 'Geçersiz yedek kimliği.' });
   }
 
