@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Lock, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Lock, ArrowRight, AlertCircle, Loader2, KeyRound, ExternalLink } from 'lucide-react';
 import { useSite } from '../../context/SiteContext';
 import { Logo } from '../../components/common/Logo';
 
@@ -105,6 +105,22 @@ export const AdminLoginPage: React.FC = () => {
                 <span>{error}</span>
               </div>
             )}
+            <details className="rounded-xl border border-white/10 bg-[#0b0b0f]/70 p-4 text-gray-300 group">
+              <summary className="cursor-pointer select-none flex items-center gap-2 text-xs font-semibold hover:text-white focus-visible:outline-[#ff5a1f]">
+                <KeyRound className="w-4 h-4 text-[#ff8c42]" />
+                Kullanıcı adını veya şifreni hatırlamıyor musun?
+              </summary>
+              <div className="mt-3 space-y-2 text-xs leading-relaxed text-gray-400">
+                <p>Kullanıcı adı: <strong className="text-gray-200">ismailsemih</strong> (sunucuda değiştirilmediyse).</p>
+                <p>Şifre otomatik olarak siteye yazılmaz. GitHub Codespaces'te <strong>ADMIN_PASSWORD</strong> adındaki gizli ayardan yönetilir.</p>
+                <p>GitHub ayarlarında yeni ve benzersiz bir şifre belirle, <strong>ismail-semih-official</strong> deposuna erişim ver ve Codespace'i durdurup yeniden başlat.</p>
+                <a href="https://github.com/settings/codespaces" target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[#ff8c42] hover:underline">
+                  Codespaces şifre ayarını aç <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+                <p>Çok sayıda hatalı giriş yaptıysan son denemenden itibaren en az 5 dakika bekle. Bu sayfa şifreni göremez veya sıfırlayamaz.</p>
+              </div>
+            </details>
 
             <button
               type="submit"
