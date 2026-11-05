@@ -82,7 +82,7 @@ export const HeroSlider: React.FC = () => {
   return (
     <section className="relative w-full pt-4 pb-8" aria-label="Öne Çıkan Slider">
       {/* Container: Centered, strictly max 1200px width */}
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+      <div className="mx-auto px-4 sm:px-6" style={{ maxWidth: Math.max(600, Math.min(1920, data.sections?.find(x => x.type === 'hero')?.maxWidth || 1200)) }}>
         <div
           className="relative w-full rounded-2xl overflow-hidden border border-white/10 bg-[#121218] shadow-2xl group"
           onMouseEnter={() => setIsPaused(true)}
