@@ -43,7 +43,9 @@ const SiteContext = createContext<SiteContextType | undefined>(undefined);
 export function SiteProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<SiteData>(initialSiteData);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isDraftMode, setIsDraftMode] = useState<boolean>(false);
+  const [isDraftMode, setIsDraftMode] = useState<boolean>(() =>
+    new URLSearchParams(window.location.search).get('studio_preview') === 'draft'
+  );
   const [hasDraftChanges, setHasDraftChanges] = useState<boolean>(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [token, setToken] = useState<string | null>(null);
@@ -124,6 +126,69 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.setProperty('--heading-font', `"${headingFont}", sans-serif`);
     document.documentElement.style.setProperty('--body-font', `"${bodyFont}", sans-serif`);
   }, [data.settings?.typography]);
+
+  // Keep published brand colors in sync with the public pages. Restrict CSS
+  // inputs to valid hex colors instead of interpolating arbitrary user strings.
+  useEffect(() => {
+    const palette = theme === 'light' ? data.settings?.lightTheme : data.settings?.darkTheme;
+    if (!palette) return;
+    const root = document.documentElement;
+    const tokens: Record<string, string> = {
+      '--bg-primary': palette.bgPrimary,
+      '--bg-secondary': palette.bgSecondary,
+      '--bg-panel': palette.panelBg,
+      '--accent': palette.accentColor,
+      '--text-primary': palette.textPrimary,
+      '--text-secondary': palette.textSecondary,
+    };
+    for (const [name, value] of Object.entries(tokens)) {
+      if (typeof value === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) {
+        root.style.setProperty(name, value);
+      }
+    }
+    const size = data.settings?.typography?.baseSize;
+    if (typeof size === 'string' && /^(1[2-9]|2[0-4])px$/.test(size)) {
+      root.style.setProperty('--body-base-size', size);
+    }
+  }, [data.settings?.darkTheme, data.settings?.lightTheme, data.settings?.typography?.baseSize, theme]);
+
+  // Update browser metadata whenever the language or published settings change.
+  useEffect(() => {
+    const title = t(
+      data.seo?.title || data.settings?.siteTitle,
+      data.seo?.title_en || data.settings?.siteTitle_en
+    );
+    if (title) document.title = title;
+    const description = t(data.seo?.description, data.seo?.description_en);
+    const ensureMeta = (name: string, content: string, attr: 'name' | 'property' = 'name') => {
+      let node = document.querySelector<HTMLMetaElement>(`meta[${attr}="${name}"]`);
+      if (!node) {
+        node = document.createElement('meta');
+        node.setAttribute(attr, name);
+        document.head.appendChild(node);
+      }
+      node.content = content;
+    };
+    if (description) {
+      ensureMeta('description', description);
+      ensureMeta('og:description', description, 'property');
+    }
+    if (title) ensureMeta('og:title', title, 'property');
+    ensureMeta('robots', data.seo?.robotsIndex === false ? 'noindex, nofollow' : 'index, follow');
+    const icon = data.settings?.faviconUrl;
+    if (typeof icon === 'string' && icon) {
+      let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+      if (!favicon) {
+        favicon = document.createElement('link');
+        favicon.rel = 'icon';
+        document.head.appendChild(favicon);
+      }
+      try {
+        const url = new URL(icon, window.location.origin);
+        if (['https:', 'http:'].includes(url.protocol)) favicon.href = url.href;
+      } catch {}
+    }
+  }, [data.seo, data.settings?.siteTitle, data.settings?.siteTitle_en, data.settings?.faviconUrl, language, t]);
 
   // Persistent Admin Experience Mode ('easy' | 'advanced' | 'expert')
   const [experienceMode, setExperienceModeState] = useState<ExperienceMode>(() => {
