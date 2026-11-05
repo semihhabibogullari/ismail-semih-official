@@ -33,6 +33,8 @@ const MESSAGES_FILE = path.resolve(DATA_DIR, 'messages.json');
 const SUBSCRIBERS_FILE = path.resolve(DATA_DIR, 'subscribers.json');
 const AUTH_FILE = path.resolve(DATA_DIR, 'auth.json');
 const AI_CONFIG_FILE = path.resolve(DATA_DIR, 'ai-config.json');
+const AI_SECRET_FILE = path.resolve(DATA_DIR, 'ai-secret.json');
+const INSTAGRAM_SECRET_FILE = path.resolve(DATA_DIR, 'instagram-secret.json');
 
 // Ensure directories exist
 [DATA_DIR, BACKUPS_DIR, UPLOADS_DIR].forEach((dir) => {
@@ -44,7 +46,7 @@ const AI_CONFIG_FILE = path.resolve(DATA_DIR, 'ai-config.json');
 // Helper for atomic file write
 function safeWriteJson(filePath: string, data: any) {
   const tempPath = `${filePath}.tmp.${Date.now()}`;
-  fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), 'utf-8');
+  fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 });
   fs.renameSync(tempPath, filePath);
 }
 
@@ -66,6 +68,10 @@ function safeReadJson<T>(filePath: string, defaultValue: T): T {
 // Deep merge helper to ensure backward compatibility with earlier data files
 function migrateSiteData(existing: any, defaults: SiteData): SiteData {
   if (!existing || typeof existing !== 'object') return defaults;
+
+  // Never copy credential fields into public site data, drafts, or backups.
+  const { accessToken: _ignoredToken, ...safeInstagramSettings } =
+    existing.settings?.instagramSettings || {};
 
   return {
     ...defaults,
@@ -91,7 +97,7 @@ function migrateSiteData(existing: any, defaults: SiteData): SiteData {
       },
       instagramSettings: {
         ...defaults.settings.instagramSettings,
-        ...(existing.settings?.instagramSettings || {}),
+        ...safeInstagramSettings,
       },
     },
     sections: existing.sections && existing.sections.length > 0
@@ -109,28 +115,46 @@ function migrateSiteData(existing: any, defaults: SiteData): SiteData {
   };
 }
 
-// Initialize Auth
+// Authentication: old (publicly bootstrapped) credentials are deliberately retired.
 interface AuthConfig {
   passwordHash: string;
   salt: string;
+  version: 2;
 }
 
 function hashPassword(password: string, salt: string): string {
-  return crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+  return crypto.scryptSync(password, salt, 64).toString('hex');
 }
 
-let authConfig = safeReadJson<AuthConfig | null>(AUTH_FILE, null);
+function passwordMatches(password: string, config: AuthConfig): boolean {
+  const candidate = Buffer.from(hashPassword(password, config.salt), 'hex');
+  const expected = Buffer.from(config.passwordHash, 'hex');
+  return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
+}
+
+const initialAuth = fs.existsSync(AUTH_FILE)
+  ? safeReadJson<Partial<AuthConfig> | null>(AUTH_FILE, null)
+  : null;
+let authConfig: AuthConfig | null =
+  initialAuth?.version === 2 &&
+  typeof initialAuth.salt === 'string' &&
+  typeof initialAuth.passwordHash === 'string'
+    ? initialAuth as AuthConfig
+    : null;
+
 if (!authConfig) {
-  const initialPassword = process.env.ADMIN_PASSWORD || 'semih2026';
-  const salt = crypto.randomBytes(16).toString('hex');
-  authConfig = {
-    salt,
-    passwordHash: hashPassword(initialPassword, salt),
-  };
-  safeWriteJson(AUTH_FILE, authConfig);
+  const bootstrapPassword = process.env.ADMIN_PASSWORD;
+  if (bootstrapPassword && bootstrapPassword.length >= 12 && bootstrapPassword.length <= 1024) {
+    const salt = crypto.randomBytes(32).toString('hex');
+    authConfig = { version: 2, salt, passwordHash: hashPassword(bootstrapPassword, salt) };
+    safeWriteJson(AUTH_FILE, authConfig);
+    console.info('Yönetici hesabı güvenli şekilde yapılandırıldı.');
+  } else {
+    console.warn('Yönetici girişi devre dışı: ADMIN_PASSWORD (en az 12 karakter) ayarlayın. Eski varsayılan parolalar geçersizdir.');
+  }
 }
 
-// AI Config
+// Store API credentials separately from published site data and normal config.
 const defaultAiConfig: AiConfig = {
   provider: 'openai',
   model: 'gpt-4o-mini',
@@ -142,11 +166,36 @@ const defaultAiConfig: AiConfig = {
     seoAssistant: true,
   },
 };
-let aiConfig: AiConfig = safeReadJson<AiConfig>(AI_CONFIG_FILE, defaultAiConfig);
+const loadedAiConfig = safeReadJson<AiConfig>(AI_CONFIG_FILE, defaultAiConfig);
+const { openaiApiKey: legacyAiKey, ...nonSecretAiConfig } = loadedAiConfig;
+let aiConfig: AiConfig = nonSecretAiConfig;
+// Migrate an existing API key out of the ordinary settings file.
+if (legacyAiKey && !fs.existsSync(AI_SECRET_FILE)) {
+  safeWriteJson(AI_SECRET_FILE, { openaiApiKey: legacyAiKey });
+}
+if (legacyAiKey) safeWriteJson(AI_CONFIG_FILE, aiConfig);
+function hasOpenAiKey(): boolean {
+  return Boolean(process.env.OPENAI_API_KEY ||
+    (fs.existsSync(AI_SECRET_FILE) &&
+      safeReadJson<{ openaiApiKey?: string }>(AI_SECRET_FILE, {}).openaiApiKey));
+}
 
-// Active session tokens
-const activeSessions = new Set<string>();
+// Sessions are opaque, HttpOnly-cookie-only and expire server-side.
+const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+const activeSessions = new Map<string, number>();
 const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
+
+function sessionToken(req: Request): string | null {
+  const token: unknown = req.cookies?.admin_session;
+  if (typeof token !== 'string') return null;
+  const expiresAt = activeSessions.get(token);
+  if (!expiresAt) return null;
+  if (expiresAt <= Date.now()) {
+    activeSessions.delete(token);
+    return null;
+  }
+  return token;
+}
 
 // Initialize Site Data with backward compatible migration
 let rawPublished = safeReadJson<any>(SITE_DATA_FILE, initialSiteData);
@@ -161,13 +210,33 @@ safeWriteJson(DRAFT_DATA_FILE, draftData);
 app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true, limit: '25mb' }));
 app.use(cookieParser());
-app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/uploads', express.static(UPLOADS_DIR, {
+  setHeaders: (res) => { res.setHeader('X-Content-Type-Options', 'nosniff'); },
+}));
+
+// Reject cross-origin state changes made with browser cookies (CSRF defense).
+app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  const origin = req.get('origin');
+  if (origin) {
+    try {
+      if (new URL(origin).host !== req.get('host')) {
+        return res.status(403).json({ error: 'Bu kaynaktan işlem yapılamaz.' });
+      }
+    } catch {
+      return res.status(403).json({ error: 'Geçersiz istek kaynağı.' });
+    }
+  }
+  next();
+});
 
 // Rate limiter for login
 function checkLoginRateLimit(req: Request, res: Response, next: NextFunction) {
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const now = Date.now();
-  const attempt = loginAttempts.get(ip) || { count: 0, lastAttempt: now };
+  const previous = loginAttempts.get(ip);
+  const attempt = previous && now - previous.lastAttempt < 5 * 60 * 1000
+    ? previous : { count: 0, lastAttempt: now };
 
   if (attempt.count >= 5 && now - attempt.lastAttempt < 5 * 60 * 1000) {
     return res.status(429).json({
@@ -179,8 +248,7 @@ function checkLoginRateLimit(req: Request, res: Response, next: NextFunction) {
 
 // Auth Middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
-  const token = req.cookies?.admin_session || req.headers.authorization?.replace('Bearer ', '');
-  if (!token || !activeSessions.has(token)) {
+  if (!sessionToken(req)) {
     return res.status(401).json({ error: 'Yetkisiz erişim. Lütfen giriş yapınız.' });
   }
   next();
@@ -203,7 +271,8 @@ const upload = multer({
   limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
   fileFilter: (_req, file, cb) => {
     const allowed = /\.(jpg|jpeg|png|gif|svg|webp|avif|mp4|webm|mp3|wav|pdf|woff2|woff)$/i;
-    if (file.originalname.match(allowed)) {
+    // SVG is excluded: active SVG documents can execute scripts on this origin.
+    if (file.originalname.match(allowed) && !/\.svg$/i.test(file.originalname)) {
       cb(null, true);
     } else {
       cb(new Error('Desteklenmeyen dosya türü.'));
@@ -215,70 +284,64 @@ const upload = multer({
 
 // 1. Auth Endpoints
 app.post('/api/auth/login', checkLoginRateLimit, (req: Request, res: Response) => {
-  const { password } = req.body;
+  const password: unknown = req.body?.password;
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
-
-  if (!password || !authConfig) {
-    return res.status(400).json({ error: 'Parola gereklidir.' });
+  if (!authConfig) {
+    return res.status(503).json({ error: 'Yönetici hesabı henüz kurulmamış. Sunucuda ADMIN_PASSWORD ayarlanmalıdır.' });
+  }
+  if (typeof password !== 'string' || !password || password.length > 1024) {
+    return res.status(400).json({ error: 'Geçerli bir parola gereklidir.' });
   }
 
-  const computed = hashPassword(password, authConfig.salt);
-  if (computed !== authConfig.passwordHash) {
-    const prev = loginAttempts.get(ip) || { count: 0, lastAttempt: Date.now() };
-    loginAttempts.set(ip, { count: prev.count + 1, lastAttempt: Date.now() });
+  if (!passwordMatches(password, authConfig)) {
+    const now = Date.now();
+    const previous = loginAttempts.get(ip);
+    const count = previous && now - previous.lastAttempt < 5 * 60 * 1000
+      ? previous.count + 1 : 1;
+    loginAttempts.set(ip, { count, lastAttempt: now });
     return res.status(401).json({ error: 'Hatalı yönetici parolası.' });
   }
 
   loginAttempts.delete(ip);
-
   const token = crypto.randomBytes(32).toString('hex');
-  activeSessions.add(token);
-
+  activeSessions.set(token, Date.now() + SESSION_LIFETIME_MS);
   res.cookie('admin_session', token, {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'strict',
     secure: IS_PROD,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+    maxAge: SESSION_LIFETIME_MS,
   });
-
-  return res.json({ success: true, token, message: 'Giriş başarılı.' });
+  // Never return the session credential to JavaScript.
+  return res.json({ success: true, message: 'Giriş başarılı.' });
 });
 
 app.post('/api/auth/logout', (req: Request, res: Response) => {
-  const token = req.cookies?.admin_session || req.headers.authorization?.replace('Bearer ', '');
-  if (token) {
-    activeSessions.delete(token);
-  }
-  res.clearCookie('admin_session');
+  const token = sessionToken(req);
+  if (token) activeSessions.delete(token);
+  res.clearCookie('admin_session', { path: '/', sameSite: 'strict', secure: IS_PROD });
   return res.json({ success: true, message: 'Çıkış yapıldı.' });
 });
 
 app.get('/api/auth/status', (req: Request, res: Response) => {
-  const token = req.cookies?.admin_session || req.headers.authorization?.replace('Bearer ', '');
-  const isAuthenticated = Boolean(token && activeSessions.has(token));
-  return res.json({ isAuthenticated });
+  return res.json({ isAuthenticated: Boolean(sessionToken(req)) });
 });
 
 app.post('/api/auth/change-password', requireAuth, (req: Request, res: Response) => {
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword || newPassword.length < 6) {
-    return res.status(400).json({ error: 'Yeni parola en az 6 karakter olmalıdır.' });
+  const { currentPassword, newPassword } = req.body || {};
+  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' ||
+      newPassword.length < 12 || newPassword.length > 1024) {
+    return res.status(400).json({ error: 'Yeni parola en az 12 karakter olmalıdır.' });
   }
-
-  if (authConfig) {
-    const currentComputed = hashPassword(currentPassword, authConfig.salt);
-    if (currentComputed !== authConfig.passwordHash) {
-      return res.status(400).json({ error: 'Mevcut parola hatalı.' });
-    }
+  if (!authConfig || !passwordMatches(currentPassword, authConfig)) {
+    return res.status(400).json({ error: 'Mevcut parola hatalı.' });
   }
-
-  const newSalt = crypto.randomBytes(16).toString('hex');
-  authConfig = {
-    salt: newSalt,
-    passwordHash: hashPassword(newPassword, newSalt),
-  };
+  const salt = crypto.randomBytes(32).toString('hex');
+  authConfig = { version: 2, salt, passwordHash: hashPassword(newPassword, salt) };
   safeWriteJson(AUTH_FILE, authConfig);
-  return res.json({ success: true, message: 'Yönetici parolası başarıyla güncellendi.' });
+  activeSessions.clear();
+  res.clearCookie('admin_session', { path: '/', sameSite: 'strict', secure: IS_PROD });
+  return res.json({ success: true, message: 'Parola değiştirildi. Lütfen yeniden giriş yapın.' });
 });
 
 // 2. Site Data Endpoints (Public & Draft)
@@ -303,11 +366,11 @@ app.post('/api/site/draft', requireAuth, (req: Request, res: Response) => {
   if (!newDraft || typeof newDraft !== 'object') {
     return res.status(400).json({ error: 'Geçersiz veri paketi.' });
   }
-  draftData = {
+  draftData = migrateSiteData({
     ...draftData,
     ...newDraft,
     updatedAt: new Date().toISOString(),
-  };
+  }, initialSiteData);
   safeWriteJson(DRAFT_DATA_FILE, draftData);
   return res.json({ success: true, data: draftData, message: 'Taslak kaydedildi.' });
 });
@@ -366,8 +429,8 @@ app.get('/api/site/backups', requireAuth, (_req: Request, res: Response) => {
 
 app.post('/api/site/restore', requireAuth, (req: Request, res: Response) => {
   const { backupId } = req.body;
-  if (!backupId) {
-    return res.status(400).json({ error: 'Yedek kimliği belirtilmelidir.' });
+  if (typeof backupId !== 'string' || !/^version_v\\d+_\\d+$/.test(backupId)) {
+    return res.status(400).json({ error: 'Geçersiz yedek kimliği.' });
   }
 
   const targetFile = path.resolve(BACKUPS_DIR, `${backupId}.json`);
@@ -422,7 +485,7 @@ app.post('/api/site/import', requireAuth, (req: Request, res: Response) => {
 });
 
 // 4. Universal Media & URL Preview System
-app.post('/api/video/preview', async (req: Request, res: Response) => {
+app.post('/api/video/preview', requireAuth, async (req: Request, res: Response) => {
   const { url } = req.body;
   if (!url || typeof url !== 'string') {
     return res.status(400).json({ error: 'URL gereklidir.' });
@@ -430,7 +493,7 @@ app.post('/api/video/preview', async (req: Request, res: Response) => {
 
   try {
     const parsed = new URL(url.trim());
-    if (!['http:', 'https:'].includes(parsed.protocol)) {
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
       return res.status(400).json({ error: 'Yalnızca HTTP ve HTTPS bağlantıları desteklenir.' });
     }
     const hostname = parsed.hostname.toLowerCase();
@@ -448,7 +511,7 @@ app.post('/api/video/preview', async (req: Request, res: Response) => {
     const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=|shorts\/)|youtu\.be\/)([^"&?\/\s]{11})/;
     const ytMatch = url.match(ytRegex);
 
-    if (ytMatch && ytMatch[1]) {
+    if ((hostname === 'youtube.com' || hostname.endsWith('.youtube.com') || hostname === 'youtu.be') && ytMatch && ytMatch[1]) {
       const videoId = ytMatch[1];
       const maxresThumb = `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`;
       const hqThumb = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
@@ -478,7 +541,7 @@ app.post('/api/video/preview', async (req: Request, res: Response) => {
     }
 
     // 2. Vimeo
-    if (hostname.includes('vimeo.com')) {
+    if (hostname === 'vimeo.com' || hostname.endsWith('.vimeo.com')) {
       try {
         const vimeoOembed = `https://vimeo.com/api/oembed.json?url=${encodeURIComponent(url)}`;
         const resp = await fetch(vimeoOembed, { signal: AbortSignal.timeout(3500) });
@@ -498,7 +561,7 @@ app.post('/api/video/preview', async (req: Request, res: Response) => {
     }
 
     // 3. Spotify
-    if (hostname.includes('spotify.com')) {
+    if (hostname === 'spotify.com' || hostname.endsWith('.spotify.com')) {
       try {
         const spotifyOembed = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
         const resp = await fetch(spotifyOembed, { signal: AbortSignal.timeout(3500) });
@@ -518,7 +581,7 @@ app.post('/api/video/preview', async (req: Request, res: Response) => {
     }
 
     // 4. Instagram Post / Reel URL
-    if (hostname.includes('instagram.com')) {
+    if (hostname === 'instagram.com' || hostname.endsWith('.instagram.com')) {
       const isReel = url.includes('/reel/') || url.includes('/reels/');
       const postId = url.split('/p/')[1]?.split('/')[0] || url.split('/reel/')[1]?.split('/')[0] || 'post';
       return res.json({
@@ -558,30 +621,12 @@ app.post('/api/video/preview', async (req: Request, res: Response) => {
       });
     }
 
-    // 7. General Webpage (OpenGraph & HTML title fallback)
-    try {
-      const resp = await fetch(url, { signal: AbortSignal.timeout(3500) });
-      if (resp.ok) {
-        const html = await resp.text();
-        const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["'](.*?)["']/i) ||
-                           html.match(/<title>(.*?)<\/title>/i);
-        const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["'](.*?)["']/i);
-        const descMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["'](.*?)["']/i);
-
-        return res.json({
-          success: true,
-          platform: 'web',
-          title: titleMatch ? titleMatch[1] : 'Web Bağlantısı',
-          description: descMatch ? descMatch[1] : 'Paylaşılan bağlantı içeriği.',
-          imageUrl: imageMatch ? imageMatch[1] : '/images/og_share.svg',
-          originalUrl: url,
-        });
-      }
-    } catch (e) {}
-
+    // Generic site scraping is deliberately disabled here: unrestricted fetch(url)
+    // allowed redirect/DNS-based SSRF into private networks. Use manual image input
+    // until a DNS-pinned, size-limited and redirect-safe metadata fetcher is provided.
     return res.json({
       success: false,
-      message: 'Bağlantıdan otomatik meta veri alınamadı. Lütfen kapak görseli ve başlığı manuel giriniz.',
+      message: 'Bu kaynak için otomatik kapak alınamıyor. Başlığı ve görseli manuel ekleyin.',
       originalUrl: url,
     });
   } catch (err: any) {
@@ -602,54 +647,62 @@ app.get('/api/instagram/config', requireAuth, (_req: Request, res: Response) => 
 });
 
 app.post('/api/instagram/config', requireAuth, (req: Request, res: Response) => {
-  const { username, autoSync, showLikes, postCountDesktop, postCountTablet, postCountMobile, accessToken } = req.body;
+  const { username, autoSync, showLikes, postCountDesktop, postCountTablet, postCountMobile, accessToken } = req.body || {};
+  if (typeof accessToken === 'string' && accessToken.trim()) {
+    safeWriteJson(INSTAGRAM_SECRET_FILE, { accessToken: accessToken.trim() });
+  }
+  const connected = Boolean(process.env.INSTAGRAM_ACCESS_TOKEN || fs.existsSync(INSTAGRAM_SECRET_FILE));
+  const { accessToken: _legacyToken, ...currentSettings } = draftData.settings.instagramSettings;
   draftData.settings.instagramSettings = {
-    ...draftData.settings.instagramSettings,
-    username: username || 'ismailsemih',
-    autoSync: autoSync ?? true,
-    showLikes: showLikes ?? true,
-    postCountDesktop: postCountDesktop || 5,
-    postCountTablet: postCountTablet || 3,
-    postCountMobile: postCountMobile || 1.5,
-    connected: Boolean(accessToken || draftData.settings.instagramSettings.connected),
-    ...(accessToken ? { accessToken } : {}),
+    ...currentSettings,
+    username: username || currentSettings.username,
+    autoSync: autoSync ?? currentSettings.autoSync,
+    showLikes: showLikes ?? currentSettings.showLikes,
+    postCountDesktop: postCountDesktop || currentSettings.postCountDesktop,
+    postCountTablet: postCountTablet || currentSettings.postCountTablet,
+    postCountMobile: postCountMobile || currentSettings.postCountMobile,
+    connected,
   };
   safeWriteJson(DRAFT_DATA_FILE, draftData);
   res.json({ success: true, settings: draftData.settings.instagramSettings, message: 'Instagram ayarları güncellendi.' });
 });
 
-app.post('/api/instagram/sync', requireAuth, async (req: Request, res: Response) => {
-  // If real token exists, sync; otherwise refresh existing high-res seed posts
-  res.json({
-    success: true,
-    syncedCount: draftData.instagramPosts.length,
-    message: 'Instagram akışı başarıyla senkronize edildi.',
-    posts: draftData.instagramPosts,
+app.post('/api/instagram/sync', requireAuth, async (_req: Request, res: Response) => {
+  return res.status(501).json({
+    success: false,
+    error: 'Instagram otomatik senkronizasyonu henüz Meta API ile bağlanmadı. Gönderileri manuel yönetebilirsiniz.',
   });
 });
 
 // 6. OpenAI & AI Assistant Endpoints
 app.get('/api/ai/config', requireAuth, (_req: Request, res: Response) => {
   res.json({
+    config: { ...aiConfig, openaiApiKey: '' },
     provider: aiConfig.provider,
     model: aiConfig.model,
     costLimitDaily: aiConfig.costLimitDaily,
     enabledCapabilities: aiConfig.enabledCapabilities,
-    hasApiKey: Boolean(aiConfig.openaiApiKey || process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY),
+    hasApiKey: hasOpenAiKey(),
   });
 });
 
 app.post('/api/ai/config', requireAuth, (req: Request, res: Response) => {
-  const { openaiApiKey, model, costLimitDaily, enabledCapabilities } = req.body;
+  const { openaiApiKey, model, costLimitDaily, enabledCapabilities } = req.body || {};
+  if (typeof openaiApiKey === 'string' && openaiApiKey.trim()) {
+    safeWriteJson(AI_SECRET_FILE, { openaiApiKey: openaiApiKey.trim() });
+  }
   aiConfig = {
     ...aiConfig,
-    ...(openaiApiKey !== undefined ? { openaiApiKey: openaiApiKey.trim() } : {}),
-    ...(model ? { model } : {}),
-    ...(costLimitDaily ? { costLimitDaily: Number(costLimitDaily) } : {}),
-    ...(enabledCapabilities ? { enabledCapabilities } : {}),
+    ...(typeof model === 'string' && model.length <= 100 ? { model } : {}),
+    ...(Number.isFinite(Number(costLimitDaily)) && Number(costLimitDaily) > 0
+      ? { costLimitDaily: Number(costLimitDaily) } : {}),
+    ...(enabledCapabilities && typeof enabledCapabilities === 'object'
+      ? { enabledCapabilities } : {}),
   };
+  // Never write credentials into this ordinary settings file.
+  delete aiConfig.openaiApiKey;
   safeWriteJson(AI_CONFIG_FILE, aiConfig);
-  res.json({ success: true, message: 'AI asistanı ayarları güvenli şekilde kaydedildi.' });
+  return res.json({ success: true, message: 'AI ayarları kaydedildi. API anahtarı ayrı, sunucu tarafında tutuluyor.' });
 });
 
 // Natural Language AI Command Router with structured proposal output
