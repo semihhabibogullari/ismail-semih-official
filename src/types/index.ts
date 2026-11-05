@@ -285,6 +285,9 @@ export interface SectionConfig {
   subtitle_en?: string;
   visible: boolean;
   order: number;
+  maxWidth?: number;
+  minHeight?: number;
+  paddingY?: number;
 }
 
 export interface SeoSettings {
