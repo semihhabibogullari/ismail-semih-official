@@ -44,3 +44,27 @@ Bu Codespaces önizlemesidir; kendi alan adında canlıya alınmış yayın değ
 ## Geliştirme ortamında giriş
 
 Codespaces ilk açılışta ortam ayarlarının nasıl yapılandırılacağını terminal günlüğüne yazar. Kalıcı yönetici parolasını GitHub Codespaces Secrets bölümünde ADMIN_PASSWORD adıyla tanımlayın, ardından Codespace'i yeniden başlatın.
+
+
+## Tam site paketini ZIP olarak indirme
+
+Bu işlem **mevcut Codespace içindeki gerçek düzenlemeleri de** ZIP'e koyar; yalnızca GitHub'daki örnek dosyaları değil.
+
+1. Codespaces'te **güncel geliştirme dalı** açık olsun:
+   `git switch security/admin-auth-and-secrets-hardening && git pull --ff-only`
+2. Terminalde tek komutu çalıştır:
+   `npm run export:full`
+3. Sol **Explorer / Dosya Gezgini**'nde proje kökündeki
+   **ismail-semih-studio-tam-paket.zip** dosyasını bul.
+4. ZIP'e sağ tıkla ve **Download / İndir** seç.
+
+Arşivde kodlar, yönetim paneli, depoya kayıtlı statik dosyalar ve
+Codespace'te bulunan `data/site-data.json`, `data/draft-data.json`,
+`public/uploads/` içeriği yer alır. **Yönetici şifresi, API anahtarı,
+ziyaretçi mesajları ve abonelik verileri kesinlikle eklenmez.**
+Arşivi alan kişinin sunucusunda ayrıca kendi `ADMIN_PASSWORD` ayarını
+yapması gerekir.
+
+Yalnızca *GitHub'da kayıtlı kaynak kodu* indirmek için geliştirme dalının
+GitHub sayfasında **Code → Download ZIP** seçebilirsin. Bu yol Codespace'in
+yerel içerik ve medya dosyalarını kapsamaz.
