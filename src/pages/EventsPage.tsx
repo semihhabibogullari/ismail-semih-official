@@ -7,11 +7,27 @@ import React, { useState } from 'react';
 import { Calendar, MapPin, Clock, Ticket, ExternalLink, Filter } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
 import { EventCalendar } from '../components/home/EventCalendar';
-import { TicketStatus } from '../types';
+import { TicketStatus, EventItem } from '../types';
+import { DetailModal, DetailModalItem } from '../components/common/DetailModal';
 
 export const EventsPage: React.FC = () => {
   const { data } = useSite();
   const [selectedCategory, setSelectedCategory] = useState<string>('Hepsi');
+  const [selectedDetail, setSelectedDetail] = useState<DetailModalItem | null>(null);
+  const showEventDetails = (event: EventItem) => setSelectedDetail({
+    title: event.title,
+    category: event.category,
+    description: event.detailDescription || event.description,
+    imageUrl: event.imageUrl,
+    videoUrl: event.detailVideoUrl,
+    actions: event.detailActions || [],
+    meta: [
+      { label: 'Tarih', value: event.date, icon: 'date' },
+      { label: 'Saat', value: event.time, icon: 'time' },
+      { label: 'Mekân', value: event.venue, icon: 'place' },
+      ...(event.price ? [{ label: 'Fiyat', value: event.price }] : []),
+    ] as DetailModalItem['meta'],
+  });
 
   const categories = ['Hepsi', 'Tiyatro', 'Performans', 'Atölye', 'Panel'];
 
@@ -150,23 +166,12 @@ export const EventsPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
-                    {event.ticketUrl ? (
-                      <a
-                        href={event.ticketUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs font-semibold transition-colors shadow-md w-full justify-center"
-                      >
-                        <Ticket className="w-3.5 h-3.5" />
-                        <span>Bilet Satın Al</span>
-                        <ExternalLink className="w-3 h-3 ml-1" />
-                      </a>
-                    ) : (
-                      <span className="text-xs text-gray-400 text-center w-full py-2">
-                        Bilet Satışı Çok Yakında
-                      </span>
-                    )}
+                  <div className="mt-6 pt-4 border-t border-white/5">
+                    <button type="button" onClick={() => showEventDetails(event)}
+                      className="inline-flex w-full justify-center items-center gap-2 px-4 py-2 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs font-semibold cursor-pointer">
+                      Detayları Gör
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -174,6 +179,7 @@ export const EventsPage: React.FC = () => {
           </div>
         </div>
       </div>
+      <DetailModal item={selectedDetail} onClose={() => setSelectedDetail(null)} />
     </div>
   );
 };
