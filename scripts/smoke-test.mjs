@@ -126,6 +126,11 @@ try {
   assert.equal(backupList.status, 200);
   const backups = (await backupList.json()).backups;
   assert.ok(Array.isArray(backups) && backups.length > 0, 'Publishing creates backup');
+  const invalidRestore = await request('/api/site/restore', {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ backupId: '../../private-file' }),
+  });
+  assert.equal(invalidRestore.status, 400, 'Invalid backup paths must be rejected');
   const backupId = backups[0].id;
   const restored = await request('/api/site/restore', {
     method: 'POST', headers: { cookie, 'content-type': 'application/json' },
@@ -142,6 +147,10 @@ try {
   assert.ok(uploadJson.file.url.startsWith('/uploads/'));
   const loadedImage = await request(uploadJson.file.url);
   assert.equal(loadedImage.status, 200, 'Uploaded image is publicly retrievable');
+  const svgUpload = new FormData();
+  svgUpload.append('file', new Blob(['<svg xmlns="http://www.w3.org/2000/svg"><script>console.log(1)</script></svg>'], {type:'image/svg+xml'}), 'danger.svg');
+  const svgResponse = await request('/api/media/upload', { method:'POST', headers:{cookie}, body:svgUpload });
+  assert.ok(svgResponse.status >= 400, 'SVG script files should never be accepted');
   const badUpload = await request('/api/media/upload', { method:'POST', body:uploadData });
   assert.equal(badUpload.status, 401, 'Public users cannot upload media');
 
