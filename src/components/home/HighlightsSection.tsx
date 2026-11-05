@@ -104,6 +104,9 @@ export const HighlightsSection: React.FC = () => {
 
                   {/* Cinematic gradient scrim */}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0f] via-[#0b0b0f]/50 to-transparent" />
+                  <button type="button" onClick={() => showDetails(activeHighlight)}
+                    className="absolute inset-0 z-[5] cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#ff5a1f]"
+                    aria-label={`${t(activeHighlight.title, activeHighlight.title_en)} — ${t('Detayları Gör', 'View Details')}`} />
 
                   {/* Play button overlay if item has video */}
                   {activeHighlight.mediaType === 'video' && activeHighlight.videoUrl && (
