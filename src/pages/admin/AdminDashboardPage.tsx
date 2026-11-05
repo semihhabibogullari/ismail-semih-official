@@ -52,6 +52,7 @@ import {
   AiConfig,
 } from '../../types';
 import { AiAssistantDrawer } from '../../components/common/AiAssistantDrawer';
+import { DetailSettingsEditor } from '../../components/admin/DetailSettingsEditor';
 
 type StudioTab =
   | 'overview'
@@ -1212,6 +1213,10 @@ export const AdminDashboardPage: React.FC = () => {
                         />
                       </div>
                     </div>
+                    <DetailSettingsEditor value={slide} onChange={patch => {
+                      setLocalData({ ...localData, heroSlides: localData.heroSlides.map(s =>
+                        s.id === slide.id ? { ...s, ...patch } : s) });
+                    }} />
                   </div>
                 ))}
               </div>
@@ -1427,9 +1432,40 @@ export const AdminDashboardPage: React.FC = () => {
                         />
                       </div>
                     </div>
+                    <DetailSettingsEditor value={ev} ticketUrl={ev.ticketUrl} onChange={patch => {
+                      setLocalData({ ...localData, events: localData.events.map(item =>
+                        item.id === ev.id ? { ...item, ...patch } : item) });
+                    }} />
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* TAB 5A: ÖNE ÇIKANLAR DETAY & BUTON YÖNETİMİ */}
+          {activeTab === 'highlights' && (
+            <div className="space-y-5">
+              <div>
+                <h3 className="text-xl font-bold text-white">Öne Çıkanlar — Detay Pencereleri</h3>
+                <p className="mt-1 text-xs text-gray-400">
+                  Her içerik için uzun açıklama, video ve açılır pencerenin altında gösterilecek butonları ayrı ayrı yönetin.
+                </p>
+              </div>
+              {(localData.highlights || []).map(item => (
+                <div key={item.id} className="p-5 rounded-2xl bg-[#151520] border border-white/10 space-y-4">
+                  <div className="flex gap-3 items-center">
+                    <img src={item.imageUrl} alt="" className="h-16 w-24 object-cover rounded-lg" />
+                    <div className="min-w-0">
+                      <p className="font-bold text-white text-sm">{item.title}</p>
+                      <p className="text-xs text-gray-400">{item.category}</p>
+                    </div>
+                  </div>
+                  <DetailSettingsEditor value={item} onChange={patch => {
+                    setLocalData({ ...localData, highlights: localData.highlights.map(h =>
+                      h.id === item.id ? { ...h, ...patch } : h) });
+                  }} />
+                </div>
+              ))}
             </div>
           )}
 
