@@ -30,7 +30,7 @@ interface SiteContextType {
   saveDraft: (updatedData: Partial<SiteData>) => Promise<{ success: boolean; message?: string }>;
   publishToLive: (note?: string) => Promise<{ success: boolean; message?: string }>;
   restoreBackup: (backupId: string) => Promise<{ success: boolean; message?: string }>;
-  login: (password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   // AI Assistant helpers
   sendAiCommand: (command: string) => Promise<{ success: boolean; proposal?: AiProposal; message?: string; error?: string }>;
@@ -270,12 +270,12 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
       const json = await res.json();
       if (res.ok && json.success) {
