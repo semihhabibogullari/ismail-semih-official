@@ -132,6 +132,8 @@ function passwordMatches(password: string, config: AuthConfig): boolean {
   return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
 }
 
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME?.trim() || 'ismailsemih';
+
 const initialAuth = fs.existsSync(AUTH_FILE)
   ? safeReadJson<Partial<AuthConfig> | null>(AUTH_FILE, null)
   : null;
@@ -142,16 +144,21 @@ let authConfig: AuthConfig | null =
     ? initialAuth as AuthConfig
     : null;
 
-if (!authConfig) {
-  const bootstrapPassword = process.env.ADMIN_PASSWORD;
-  if (bootstrapPassword && bootstrapPassword.length >= 12 && bootstrapPassword.length <= 1024) {
+// Store the real password exclusively as a deployment secret. A changed secret
+// replaces an earlier stored hash at the next server startup.
+const bootstrapPassword = process.env.ADMIN_PASSWORD;
+if (bootstrapPassword) {
+  if (bootstrapPassword.length < 12 || bootstrapPassword.length > 1024) {
+    throw new Error('ADMIN_PASSWORD 12–1024 karakter olmalıdır.');
+  }
+  if (!authConfig || !passwordMatches(bootstrapPassword, authConfig)) {
     const salt = crypto.randomBytes(32).toString('hex');
     authConfig = { version: 2, salt, passwordHash: hashPassword(bootstrapPassword, salt) };
     safeWriteJson(AUTH_FILE, authConfig);
-    console.info('Yönetici hesabı güvenli şekilde yapılandırıldı.');
-  } else {
-    console.warn('Yönetici girişi devre dışı: ADMIN_PASSWORD (en az 12 karakter) ayarlayın. Eski varsayılan parolalar geçersizdir.');
+    console.info('Yönetici şifresi güvenli ayarlardan yapılandırıldı.');
   }
+} else if (!authConfig) {
+  console.warn('Yönetici girişi devre dışı: ADMIN_PASSWORD gizli ayarını tanımlayın.');
 }
 
 // Store API credentials separately from published site data and normal config.
@@ -284,22 +291,24 @@ const upload = multer({
 
 // 1. Auth Endpoints
 app.post('/api/auth/login', checkLoginRateLimit, (req: Request, res: Response) => {
+  const username: unknown = req.body?.username;
   const password: unknown = req.body?.password;
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (!authConfig) {
     return res.status(503).json({ error: 'Yönetici hesabı henüz kurulmamış. Sunucuda ADMIN_PASSWORD ayarlanmalıdır.' });
   }
-  if (typeof password !== 'string' || !password || password.length > 1024) {
-    return res.status(400).json({ error: 'Geçerli bir parola gereklidir.' });
+  if (typeof username !== 'string' || !username.trim() || username.length > 128 ||
+      typeof password !== 'string' || !password || password.length > 1024) {
+    return res.status(400).json({ error: 'Kullanıcı adı ve şifre gereklidir.' });
   }
-
-  if (!passwordMatches(password, authConfig)) {
+  const validPassword = passwordMatches(password, authConfig);
+  if (username.trim() !== ADMIN_USERNAME || !validPassword) {
     const now = Date.now();
     const previous = loginAttempts.get(ip);
     const count = previous && now - previous.lastAttempt < 5 * 60 * 1000
       ? previous.count + 1 : 1;
     loginAttempts.set(ip, { count, lastAttempt: now });
-    return res.status(401).json({ error: 'Hatalı yönetici parolası.' });
+    return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı.' });
   }
 
   loginAttempts.delete(ip);
@@ -328,6 +337,9 @@ app.get('/api/auth/status', (req: Request, res: Response) => {
 });
 
 app.post('/api/auth/change-password', requireAuth, (req: Request, res: Response) => {
+  if (process.env.ADMIN_PASSWORD) {
+    return res.status(409).json({ error: 'Şifre sunucunun ADMIN_PASSWORD gizli ayarından yönetilir.' });
+  }
   const { currentPassword, newPassword } = req.body || {};
   if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' ||
       newPassword.length < 12 || newPassword.length > 1024) {
