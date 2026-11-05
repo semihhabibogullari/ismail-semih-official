@@ -105,9 +105,15 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     const headingFont = typography.headingFont || 'Space Grotesk';
     const bodyFont = typography.bodyFont || 'Inter';
 
-    const fontsToLoad = [headingFont, bodyFont].filter(
-      (f) => !['Inter', 'Space Grotesk', 'sans-serif', 'serif', 'monospace'].includes(f)
-    );
+    const sectionFonts = (data.sections || []).flatMap(section =>
+      [section.appearance?.headingFont, section.appearance?.bodyFont]
+    ).filter((font): font is string => typeof font === 'string' && font.length > 0);
+    const allowedGoogleFonts = new Set([
+      'Inter', 'Space Grotesk', 'Montserrat', 'Poppins', 'Roboto', 'Open Sans',
+      'Lato', 'Playfair Display', 'Merriweather', 'Oswald', 'DM Sans', 'Source Sans 3',
+    ]);
+    const fontsToLoad = [...new Set([headingFont, bodyFont, ...sectionFonts])]
+      .filter(font => allowedGoogleFonts.has(font));
 
     if (fontsToLoad.length > 0) {
       const fontQuery = fontsToLoad.map((f) => `family=${f.replace(/ /g, '+')}:wght@400;600;700`).join('&');
@@ -125,7 +131,7 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     // Set CSS font family variables
     document.documentElement.style.setProperty('--heading-font', `"${headingFont}", sans-serif`);
     document.documentElement.style.setProperty('--body-font', `"${bodyFont}", sans-serif`);
-  }, [data.settings?.typography]);
+  }, [data.settings?.typography, data.sections]);
 
   // Keep published brand colors in sync with the public pages. Restrict CSS
   // inputs to valid hex colors instead of interpolating arbitrary user strings.
