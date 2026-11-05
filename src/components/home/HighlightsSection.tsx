@@ -4,11 +4,11 @@
  */
 
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+
 import { Play, Sparkles, ArrowRight, Eye, Film } from 'lucide-react';
 import { useSite } from '../../context/SiteContext';
 import { HighlightItem } from '../../types';
-import { VideoModal } from '../common/VideoModal';
+import { DetailModal, DetailModalItem } from '../common/DetailModal';
 
 export const HighlightsSection: React.FC = () => {
   const { data, t } = useSite();
@@ -18,12 +18,18 @@ export const HighlightsSection: React.FC = () => {
 
   const [selectedCategory, setSelectedCategory] = useState<string>('Hepsi');
   const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
-  const [videoModalOpen, setVideoModalOpen] = useState(false);
-  const [activeModalData, setActiveModalData] = useState<{
-    title: string;
-    embedUrl?: string;
-    videoUrl?: string;
-  } | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<DetailModalItem | null>(null);
+  const showDetails = (item: HighlightItem) => {
+    setSelectedDetail({
+      title: t(item.title, item.title_en),
+      category: t(item.category, item.category_en),
+      description: t(item.detailDescription || item.description, item.detailDescription_en || item.description_en),
+      imageUrl: item.imageUrl,
+      videoUrl: item.detailVideoUrl || item.videoUrl,
+      embedUrl: item.detailVideoUrl ? undefined : item.embedUrl,
+      actions: item.detailActions || [],
+    });
+  };
 
   // Extract unique categories
   const categories = ['Hepsi', ...Array.from(new Set(allHighlights.map((h) => h.category.split('/')[0].trim())))];
@@ -40,16 +46,6 @@ export const HighlightsSection: React.FC = () => {
     filteredHighlights[0] ||
     allHighlights[0];
 
-  const handleOpenVideo = (item: HighlightItem) => {
-    if (item.videoUrl || item.embedUrl) {
-      setActiveModalData({
-        title: item.title,
-        embedUrl: item.embedUrl,
-        videoUrl: item.videoUrl,
-      });
-      setVideoModalOpen(true);
-    }
-  };
 
   if (allHighlights.length === 0) return null;
 
@@ -112,7 +108,7 @@ export const HighlightsSection: React.FC = () => {
                   {/* Play button overlay if item has video */}
                   {activeHighlight.mediaType === 'video' && activeHighlight.videoUrl && (
                     <button
-                      onClick={() => handleOpenVideo(activeHighlight)}
+                      onClick={() => showDetails(activeHighlight)}
                       className="absolute inset-0 m-auto w-16 h-16 rounded-full bg-[#ff5a1f]/90 hover:bg-[#ff5a1f] text-white flex items-center justify-center shadow-2xl shadow-[#ff5a1f]/50 transition-transform transform hover:scale-110 focus:outline-none focus:ring-4 focus:ring-[#ff5a1f]/40 z-20"
                       aria-label="Videoyu İzle"
                     >
@@ -136,9 +132,9 @@ export const HighlightsSection: React.FC = () => {
                     </p>
 
                     <div className="flex items-center gap-3">
-                      {activeHighlight.videoUrl ? (
+                      {(activeHighlight.videoUrl || activeHighlight.embedUrl) ? (
                         <button
-                          onClick={() => handleOpenVideo(activeHighlight)}
+                          onClick={() => showDetails(activeHighlight)}
                           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs font-semibold transition-all shadow-md cursor-pointer"
                         >
                           <Film className="w-4 h-4" />
@@ -146,14 +142,13 @@ export const HighlightsSection: React.FC = () => {
                         </button>
                       ) : null}
 
-                      {activeHighlight.linkUrl && (
-                        <Link
-                          to={activeHighlight.linkUrl}
+                      {(
+                        <button type="button" onClick={() => showDetails(activeHighlight)}
                           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
                         >
                           <span>{t(activeHighlight.linkText || 'Detayları İncele', activeHighlight.linkText_en || 'View Details')}</span>
                           <ArrowRight className="w-3.5 h-3.5" />
-                        </Link>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -176,9 +171,7 @@ export const HighlightsSection: React.FC = () => {
                   onMouseEnter={() => setActiveHighlightId(item.id)}
                   onClick={() => {
                     setActiveHighlightId(item.id);
-                    if (window.innerWidth < 1024 && item.videoUrl) {
-                      handleOpenVideo(item);
-                    }
+                    showDetails(item);
                   }}
                   className={`p-4 sm:p-5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
                     isSelected
@@ -242,16 +235,7 @@ export const HighlightsSection: React.FC = () => {
         </div>
       </div>
 
-      {/* Video Lightbox Modal */}
-      {activeModalData && (
-        <VideoModal
-          isOpen={videoModalOpen}
-          onClose={() => setVideoModalOpen(false)}
-          title={activeModalData.title}
-          embedUrl={activeModalData.embedUrl}
-          videoUrl={activeModalData.videoUrl}
-        />
-      )}
+      <DetailModal item={selectedDetail} onClose={() => setSelectedDetail(null)} />
     </section>
   );
 };
