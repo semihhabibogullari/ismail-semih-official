@@ -137,6 +137,8 @@ export interface HeroSlide extends DetailFields {
   badge?: string;
   badge_en?: string;
   imageUrl: string;
+  mediaType?: 'image' | 'video';
+  videoUrl?: string;
   buttonText: string;
   buttonText_en?: string;
   buttonLink: string;
