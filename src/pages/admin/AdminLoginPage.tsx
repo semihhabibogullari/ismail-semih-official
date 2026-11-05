@@ -13,6 +13,7 @@ export const AdminLoginPage: React.FC = () => {
   const { login, isAuthenticated } = useSite();
   const navigate = useNavigate();
 
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,14 +29,14 @@ export const AdminLoginPage: React.FC = () => {
     e.preventDefault();
     setError(null);
 
-    if (!password) {
-      setError('Lütfen yönetici parolasını giriniz.');
+    if (!username.trim() || !password) {
+      setError('Kullanıcı adı ve şifrenizi giriniz.');
       return;
     }
 
     setIsLoading(true);
     try {
-      const result = await login(password);
+      const result = await login(username.trim(), password);
       if (result.success) {
         navigate('/admin');
       } else {
@@ -72,16 +73,25 @@ export const AdminLoginPage: React.FC = () => {
         <div className="p-8 rounded-2xl bg-[#121218] border border-white/10 shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-semibold text-gray-300 mb-2">
-                Yönetici Parolası
+              <label htmlFor="admin-username" className="block text-xs font-semibold text-gray-300 mb-2">Kullanıcı Adı</label>
+              <input id="admin-username" type="text" autoComplete="username" autoCapitalize="none"
+                value={username} onChange={e=>setUsername(e.target.value)} placeholder="Kullanıcı adınızı girin"
+                autoFocus disabled={isLoading} required
+                className="w-full px-4 py-3 rounded-xl bg-[#0b0b0f] border border-white/15 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#ff5a1f]" />
+            </div>
+            <div>
+              <label htmlFor="admin-password" className="block text-xs font-semibold text-gray-300 mb-2">
+                Şifre
               </label>
               <input
+                id="admin-password"
                 type="password"
+                autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••••••"
-                autoFocus
                 disabled={isLoading}
+                required
                 className="w-full px-4 py-3 rounded-xl bg-[#0b0b0f] border border-white/15 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#ff5a1f]"
               />
               <span className="text-[11px] text-gray-500 block mt-1.5">
