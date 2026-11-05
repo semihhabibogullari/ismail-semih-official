@@ -2023,7 +2023,7 @@ export const AdminDashboardPage: React.FC = () => {
                     className="w-full px-4 py-2.5 rounded-xl bg-[#0b0b0f] border border-white/10 text-white text-xs font-mono"
                   />
                   <span className="text-[11px] text-gray-400 mt-1 block">
-                    Anahtarınız sunucu tarafında güvenli olarak `/data/ai-config.json` içinde saklanır.
+                    Anahtarınız sunucuda ayrı, gizli bir dosyada saklanır; site ziyaretçilerine gösterilmez.
                   </span>
                 </div>
 
