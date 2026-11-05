@@ -11,6 +11,8 @@ import { useSite } from '../../context/SiteContext';
 import type { SiteData, DetailFields } from '../../types';
 import { StudioMediaField } from '../../components/admin/StudioMediaField';
 import { DetailSettingsEditor } from '../../components/admin/DetailSettingsEditor';
+import { SectionAppearanceEditor } from '../../components/admin/SectionAppearanceEditor';
+import type { SectionAppearance, SectionConfig } from '../../types';
 
 type CollectionKey = 'heroSlides' | 'events' | 'highlights' | 'instagramPosts' | 'podcasts' | 'articles' | 'trainings' | 'press';
 type Panel = CollectionKey | 'general' | 'sections' | 'menu' | 'newsletter' | 'support';
@@ -227,6 +229,20 @@ export const StudioDashboardPage: React.FC = () => {
   const settingsPatch=(patch:Generic)=>mutate(s=>({...s,settings:{...s.settings,...patch}}));
   const seoPatch=(patch:Generic)=>mutate(s=>({...s,seo:{...s.seo,...patch}}));
   const currentMeta=PANEL_META.find(p=>p.key===panel);
+  const sectionForGroup = (key?: CollectionKey): SectionConfig | undefined => {
+    const lookup: Record<CollectionKey, SectionConfig['type']> = {
+      heroSlides: 'hero', events: 'calendar', highlights: 'highlights',
+      instagramPosts: 'instagram', podcasts: 'podcast', articles: 'ai',
+      trainings: 'trainings', press: 'press'
+    };
+    return key ? local.sections.find(sec => sec.type === lookup[key]) : undefined;
+  };
+  const updateAppearance = (id: string, appearance: SectionAppearance) => {
+    mutate(s=>({...s,sections:s.sections.map(sec=>sec.id===id?{...sec,appearance}:sec)}));
+  };
+  const applyAppearanceToAll = (appearance: SectionAppearance) => {
+    mutate(s=>({...s,sections:s.sections.map(sec=>({...sec,appearance:{...appearance}}))}));
+  };
 
   if(isLoading || !isAuthenticated) return <div className="min-h-screen grid place-items-center text-gray-300"><Loader2 className="animate-spin" /></div>;
 
@@ -310,6 +326,12 @@ export const StudioDashboardPage: React.FC = () => {
       </>:null}
 
       {group&&<section className="space-y-5">
+        {sectionForGroup(group.key) && (
+          <SectionAppearanceEditor title={group.name}
+            value={sectionForGroup(group.key)?.appearance}
+            onChange={next=>updateAppearance(sectionForGroup(group.key)!.id,next)}
+            onApplyAll={applyAppearanceToAll}/>
+        )}
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
           <div><h2 className="text-xl font-semibold">{group.name} Yönetimi</h2><p className="text-gray-400 text-xs mt-1">Her içerik için + ekle, kalem ile düzenle, çöp kutusuyla sil.</p></div>
           <button type="button" onClick={insertItem} className="flex gap-2 items-center justify-center px-4 py-3 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] font-semibold text-sm"><Plus size={19}/>Yeni Paylaşım Ekle</button>
@@ -393,6 +415,9 @@ export const StudioDashboardPage: React.FC = () => {
                   onChange={e=>mutate(s=>({...s,sections:s.sections.map(x=>x.id===sec.id?{...x,[key]:e.target.value===''?undefined:Number(e.target.value)}:x)}))}/>
               </label>)}
             </div>
+            <SectionAppearanceEditor title={sec.title} value={sec.appearance}
+              onChange={next=>updateAppearance(sec.id,next)}
+              onApplyAll={applyAppearanceToAll}/>
           </div>))}
       </section>}
 
