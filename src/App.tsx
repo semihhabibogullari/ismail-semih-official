@@ -21,6 +21,7 @@ import { ContactPage } from './pages/ContactPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AdminLoginPage } from './pages/admin/AdminLoginPage';
 import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
+import { StudioDashboardPage } from './pages/admin/StudioDashboardPage';
 
 // Scroll to top on route change
 function ScrollToTop() {
@@ -53,7 +54,8 @@ function AppLayout() {
           <Route path="/hakkimda" element={<AboutPage />} />
           <Route path="/iletisim" element={<ContactPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
-          <Route path="/admin" element={<AdminDashboardPage />} />
+          <Route path="/admin" element={<StudioDashboardPage />} />
+          <Route path="/admin/advanced" element={<AdminDashboardPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </main>
