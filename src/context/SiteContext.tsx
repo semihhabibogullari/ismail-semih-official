@@ -154,12 +154,14 @@ export function SiteProvider({ children }: { children: ReactNode }) {
 
   // Update browser metadata whenever the language or published settings change.
   useEffect(() => {
-    const title = t(
+    const localized = (tr?: string, en?: string) =>
+      language === 'en' && en?.trim() ? en : (tr || '');
+    const title = localized(
       data.seo?.title || data.settings?.siteTitle,
       data.seo?.title_en || data.settings?.siteTitle_en
     );
     if (title) document.title = title;
-    const description = t(data.seo?.description, data.seo?.description_en);
+    const description = localized(data.seo?.description, data.seo?.description_en);
     const ensureMeta = (name: string, content: string, attr: 'name' | 'property' = 'name') => {
       let node = document.querySelector<HTMLMetaElement>(`meta[${attr}="${name}"]`);
       if (!node) {
@@ -188,7 +190,7 @@ export function SiteProvider({ children }: { children: ReactNode }) {
         if (['https:', 'http:'].includes(url.protocol)) favicon.href = url.href;
       } catch {}
     }
-  }, [data.seo, data.settings?.siteTitle, data.settings?.siteTitle_en, data.settings?.faviconUrl, language, t]);
+  }, [data.seo, data.settings?.siteTitle, data.settings?.siteTitle_en, data.settings?.faviconUrl, language]);
 
   // Persistent Admin Experience Mode ('easy' | 'advanced' | 'expert')
   const [experienceMode, setExperienceModeState] = useState<ExperienceMode>(() => {
