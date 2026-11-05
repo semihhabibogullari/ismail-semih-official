@@ -70,7 +70,7 @@ export const HeroSlider: React.FC = () => {
       category: t(slide.category, slide.category_en),
       description: t(slide.detailDescription || slide.subtitle, slide.detailDescription_en || slide.subtitle_en),
       imageUrl: slide.imageUrl,
-      videoUrl: slide.detailVideoUrl,
+      videoUrl: slide.detailVideoUrl || slide.videoUrl,
       actions: slide.detailActions || [],
     });
   };
@@ -113,13 +113,15 @@ export const HeroSlider: React.FC = () => {
                     isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
                   }`}
                 >
-                  {/* Slide Background Image */}
-                  <img
-                    src={slide.imageUrl}
-                    alt={t(slide.title, slide.title_en)}
-                    className={imageAnimationClass}
-                    loading={index === 0 ? 'eager' : 'lazy'}
-                  />
+                  {/* Image or direct MP4/WebM background, with cover fallback for embeds. */}
+                  {slide.mediaType === 'video' && slide.videoUrl &&
+                    /\.(mp4|webm)(?:[?#]|$)/i.test(slide.videoUrl) ? (
+                    <video src={slide.videoUrl} poster={slide.imageUrl} muted loop autoPlay playsInline
+                      aria-label={t(slide.title, slide.title_en)} className="w-full h-full object-cover" />
+                  ) : (
+                    <img src={slide.imageUrl} alt={t(slide.title, slide.title_en)}
+                      className={imageAnimationClass} loading={index === 0 ? 'eager' : 'lazy'} />
+                  )}
 
                   {/* Gradient Scrim for WCAG readability */}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0f] via-[#0b0b0f]/60 to-transparent lg:bg-gradient-to-r lg:from-[#0b0b0f]/90 lg:via-[#0b0b0f]/60 lg:to-transparent" />
