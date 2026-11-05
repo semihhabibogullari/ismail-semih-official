@@ -269,6 +269,26 @@ export interface PressItem {
   published: boolean;
 }
 
+export interface SectionAppearance {
+  headingColor?: string;
+  textColor?: string;
+  backgroundColor?: string;
+  accentColor?: string;
+  cardColor?: string;
+  borderColor?: string;
+  buttonColor?: string;
+  buttonTextColor?: string;
+  shadowColor?: string;
+  shadowOpacity?: number;
+  shadowBlur?: number;
+  headingFont?: string;
+  bodyFont?: string;
+  headingSize?: number;
+  cardTitleSize?: number;
+  textSize?: number;
+  radius?: number;
+}
+
 export interface SectionConfig {
   id: string;
   type:
@@ -290,6 +310,7 @@ export interface SectionConfig {
   maxWidth?: number;
   minHeight?: number;
   paddingY?: number;
+  appearance?: SectionAppearance;
 }
 
 export interface SeoSettings {
