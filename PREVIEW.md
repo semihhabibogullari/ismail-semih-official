@@ -41,20 +41,6 @@ npm run dev
 
 Bu Codespaces önizlemesidir; kendi alan adında canlıya alınmış yayın değildir. Veriler şimdilik Codespaces dosya sistemi içinde kalır ve kalıcı üretim veritabanı yerine geçmez.
 
-## Şifre tanımlanmamış hatasını hızlıca çözme
+## Geliştirme ortamında giriş
 
-Codespaces'te geliştirme sürümü ilk kez **yönetici hesabı olmadan** açılırsa, sistem kendiliğinden **rastgele, güçlü ve geçici bir şifre** üretir. Bu şifre kaynak koduna veya GitHub deposuna yazılmaz. Codespaces terminal günlüğünde görebilirsin:
-
-```bash
-grep -A 7 'İLK YÖNETİCİ KURULUMU' /tmp/ismail-semih-preview.log
-```
-
-Terminal günlüğünde eski bir oturuma ait şifre görünmüyorsa veya **kendi şifreni belirlemek** istiyorsan, Codespaces terminalinde:
-
-```bash
-npm run admin:setup
-```
-
-Komut şifreyi iki kez **ekranda göstermeden** ister. En az 12 karakter olmalıdır. Ardından `/admin/login` üzerinden kullanıcı adı `ismailsemih` ile giriş yapılabilir. Sunucu yeni şifreyi bir sonraki girişte kendiliğinden yükler; tarayıcıyı yenilemek yeterlidir. **Gerçek üretim yayını** için Codespaces'in geçici mekanizması kullanılmaz, `ADMIN_PASSWORD` sunucu sırrı tanımlanır.
-
-**Uyarı:** Sohbetlerde veya başka yerlerde paylaştığın şifreleri tekrar kullanma. Codespaces portunu Private tut.
+Codespaces ilk açılışta ortam ayarlarının nasıl yapılandırılacağını terminal günlüğüne yazar. Kalıcı yönetici parolasını GitHub Codespaces Secrets bölümünde ADMIN_PASSWORD adıyla tanımlayın, ardından Codespace'i yeniden başlatın.
