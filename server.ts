@@ -24,9 +24,9 @@ const PORT = Number(process.env.PORT) || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
 // Directories
-const DATA_DIR = path.resolve(__dirname, 'data');
+const DATA_DIR = process.env.STUDIO_DATA_DIR ? path.resolve(process.env.STUDIO_DATA_DIR) : path.resolve(__dirname, 'data');
 const BACKUPS_DIR = path.resolve(DATA_DIR, 'backups');
-const UPLOADS_DIR = path.resolve(__dirname, 'public/uploads');
+const UPLOADS_DIR = process.env.STUDIO_UPLOADS_DIR ? path.resolve(process.env.STUDIO_UPLOADS_DIR) : path.resolve(__dirname, 'public/uploads');
 const SITE_DATA_FILE = path.resolve(DATA_DIR, 'site-data.json');
 const DRAFT_DATA_FILE = path.resolve(DATA_DIR, 'draft-data.json');
 const MESSAGES_FILE = path.resolve(DATA_DIR, 'messages.json');
