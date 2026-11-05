@@ -156,7 +156,7 @@ export const HeroSlider: React.FC = () => {
                     {(slide.buttonText || slide.title) && (
                       <div>
                         <button type="button" onClick={() => openSlideDetails(slide)}
-                          className="pointer-events-auto ="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs sm:text-sm font-semibold transition-all transform hover:translate-x-0.5 shadow-lg shadow-[#ff5a1f]/20 focus:outline-none focus:ring-2 focus:ring-[#ff5a1f] cursor-pointer"
+                          className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs sm:text-sm font-semibold transition-all transform hover:translate-x-0.5 shadow-lg shadow-[#ff5a1f]/20 focus:outline-none focus:ring-2 focus:ring-[#ff5a1f] cursor-pointer"
                         >
                           <span>{t('Detayları Gör', 'View Details')}</span>
                           <ArrowRight className="w-4 h-4" />
