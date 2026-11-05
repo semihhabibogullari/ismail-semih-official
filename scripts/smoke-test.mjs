@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 
+const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ismail-smoke-'));
 const port = 36181;
 const base = `http://127.0.0.1:${port}`;
 const testUsername = 'ismailsemih';
 const testPassword = 'local-smoke-password-only-2026!';
 const server = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
-  env: { ...process.env, PORT: String(port), NODE_ENV: 'production', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword },
+  env: { ...process.env, PORT: String(port), NODE_ENV: 'production', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
+    STUDIO_DATA_DIR: path.join(isolatedRoot, 'data'), STUDIO_UPLOADS_DIR: path.join(isolatedRoot, 'uploads') },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let logs = '';
@@ -93,6 +98,53 @@ try {
   const preview = await withPreview.json();
   assert.equal(preview.platform, 'youtube');
 
+
+  // Real CMS workflow using a disposable data directory.
+  const draftResponse = await request('/api/site/draft', {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ ...publicJson.data, settings: {
+      ...publicJson.data.settings, siteTitle: 'CI Taslak Test Site'
+    }}),
+  });
+  assert.equal(draftResponse.status, 200, 'Admin can save a draft');
+  const draftJson = await draftResponse.json();
+  assert.equal(draftJson.data.settings.siteTitle, 'CI Taslak Test Site');
+
+  const beforePublish = await (await request('/api/site')).json();
+  assert.notEqual(beforePublish.data.settings.siteTitle, 'CI Taslak Test Site',
+    'A draft must not leak to the public site');
+
+  const publishResponse = await request('/api/site/publish', {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ note: 'Smoke test publication' }),
+  });
+  assert.equal(publishResponse.status, 200, 'Admin can publish a draft');
+  const published = await (await request('/api/site')).json();
+  assert.equal(published.data.settings.siteTitle, 'CI Taslak Test Site');
+
+  const backupList = await request('/api/site/backups', { headers: { cookie } });
+  assert.equal(backupList.status, 200);
+  const backups = (await backupList.json()).backups;
+  assert.ok(Array.isArray(backups) && backups.length > 0, 'Publishing creates backup');
+  const backupId = backups[0].id;
+  const restored = await request('/api/site/restore', {
+    method: 'POST', headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ backupId }),
+  });
+  assert.equal(restored.status, 200, 'Backups are restorable to draft');
+
+  const uploadData = new FormData();
+  const tinyPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/6DkAAAAASUVORK5CYII=', 'base64');
+  uploadData.append('file', new Blob([tinyPng], { type: 'image/png' }), 'smoke-test.png');
+  const uploaded = await request('/api/media/upload', { method:'POST', headers:{ cookie }, body:uploadData });
+  assert.equal(uploaded.status, 200, 'Admin can upload a picture');
+  const uploadJson = await uploaded.json();
+  assert.ok(uploadJson.file.url.startsWith('/uploads/'));
+  const loadedImage = await request(uploadJson.file.url);
+  assert.equal(loadedImage.status, 200, 'Uploaded image is publicly retrievable');
+  const badUpload = await request('/api/media/upload', { method:'POST', body:uploadData });
+  assert.equal(badUpload.status, 401, 'Public users cannot upload media');
+
   const logout = await request('/api/auth/logout', { method: 'POST', headers: { cookie } });
   assert.equal(logout.status, 200);
   const oldSession = await request('/api/site/draft', { headers: { cookie } });
@@ -104,4 +156,6 @@ try {
   process.exitCode = 1;
 } finally {
   server.kill('SIGTERM');
+  // The smoke suite deliberately never edits the developer's real site files.
+  fs.rmSync(isolatedRoot, { recursive: true, force: true });
 }
