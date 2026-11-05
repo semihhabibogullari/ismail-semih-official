@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import type { SectionAppearance } from '../types';
 
-type SectionStyles = CSSProperties & Record<`--section-${string}`, string>;
+type SectionStyles = CSSProperties & Record<`--section-${string}`, string> & { '--accent'?: string };
 export type SectionPresentationProps = {
   className: string;
   style: SectionStyles;
