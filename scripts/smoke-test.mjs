@@ -4,9 +4,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 const port = 36181;
 const base = `http://127.0.0.1:${port}`;
+const testUsername = 'ismailsemih';
 const testPassword = 'local-smoke-password-only-2026!';
 const server = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
-  env: { ...process.env, PORT: String(port), NODE_ENV: 'production', ADMIN_PASSWORD: testPassword },
+  env: { ...process.env, PORT: String(port), NODE_ENV: 'production', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
 let logs = '';
@@ -39,13 +40,23 @@ try {
 
   const wrong = await request('/api/auth/login', {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ password: 'semih2026' }),
+    body: JSON.stringify({ username: testUsername, password: 'old-public-default-not-allowed' }),
   });
   assert.equal(wrong.status, 401, 'The old default password must no longer work');
 
-  const login = await request('/api/auth/login', {
+  const wrongUsername = await request('/api/auth/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: 'different-user', password: testPassword }),
+  });
+  assert.equal(wrongUsername.status, 401);
+  const missingUsername = await request('/api/auth/login', {
     method: 'POST', headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ password: testPassword }),
+  });
+  assert.equal(missingUsername.status, 400);
+  const login = await request('/api/auth/login', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: testUsername, password: testPassword }),
   });
   assert.equal(login.status, 200);
   const loginJson = await login.json();
