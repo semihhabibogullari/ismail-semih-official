@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { DetailModal, DetailModalItem } from '../common/DetailModal';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { useSite } from '../../context/SiteContext';
 
@@ -19,6 +19,7 @@ export const HeroSlider: React.FC = () => {
   };
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedDetail, setSelectedDetail] = useState<DetailModalItem | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
@@ -61,6 +62,17 @@ export const HeroSlider: React.FC = () => {
     }
     touchStartX.current = null;
     touchEndX.current = null;
+  };
+
+  const openSlideDetails = (slide: typeof slides[number]) => {
+    setSelectedDetail({
+      title: t(slide.title, slide.title_en),
+      category: t(slide.category, slide.category_en),
+      description: t(slide.detailDescription || slide.subtitle, slide.detailDescription_en || slide.subtitle_en),
+      imageUrl: slide.imageUrl,
+      videoUrl: slide.detailVideoUrl,
+      actions: slide.detailActions || [],
+    });
   };
 
   if (slideCount === 0) return null;
@@ -135,15 +147,14 @@ export const HeroSlider: React.FC = () => {
                     </p>
 
                     {/* CTA Button */}
-                    {slide.buttonText && (
+                    {(slide.buttonText || slide.title) && (
                       <div>
-                        <Link
-                          to={slide.buttonLink || '/etkinlikler'}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs sm:text-sm font-semibold transition-all transform hover:translate-x-0.5 shadow-lg shadow-[#ff5a1f]/20 focus:outline-none focus:ring-2 focus:ring-[#ff5a1f]"
+                        <button type="button" onClick={() => openSlideDetails(slide)}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs sm:text-sm font-semibold transition-all transform hover:translate-x-0.5 shadow-lg shadow-[#ff5a1f]/20 focus:outline-none focus:ring-2 focus:ring-[#ff5a1f] cursor-pointer"
                         >
-                          <span>{t(slide.buttonText, slide.buttonText_en)}</span>
+                          <span>{t('Detayları Gör', 'View Details')}</span>
                           <ArrowRight className="w-4 h-4" />
-                        </Link>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -194,6 +205,7 @@ export const HeroSlider: React.FC = () => {
           </div>
         </div>
       </div>
+      <DetailModal item={selectedDetail} onClose={() => setSelectedDetail(null)} />
     </section>
   );
 };
