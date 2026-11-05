@@ -158,7 +158,23 @@ if (bootstrapPassword) {
     console.info('Yönetici şifresi güvenli ayarlardan yapılandırıldı.');
   }
 } else if (!authConfig) {
-  console.warn('Yönetici girişi devre dışı: ADMIN_PASSWORD gizli ayarını tanımlayın.');
+  // Codespaces is a private development workspace. Generate a unique, strong
+  // temporary credential only there, never in production or public source code.
+  if (!IS_PROD && process.env.CODESPACES === 'true') {
+    const temporaryPassword = crypto.randomBytes(24).toString('base64url');
+    const salt = crypto.randomBytes(32).toString('hex');
+    authConfig = { version: 2, salt, passwordHash: hashPassword(temporaryPassword, salt) };
+    safeWriteJson(AUTH_FILE, authConfig);
+    console.info('\n=======================================================');
+    console.info('İSMAİL SEMİH STUDIO — İLK YÖNETİCİ KURULUMU');
+    console.info('Kullanıcı adı:', ADMIN_USERNAME);
+    console.info('Geçici şifre:', temporaryPassword);
+    console.info('Şifreniz yalnızca bu Codespaces terminal günlüğüne yazıldı.');
+    console.info('Kendinize özel bir şifre belirlemek için: npm run admin:setup');
+    console.info('=======================================================\n');
+  } else {
+    console.warn('Yönetici girişi kapalı: ADMIN_PASSWORD gizli ayarını veya terminalde npm run admin:setup komutunu kullanın.');
+  }
 }
 
 // Store API credentials separately from published site data and normal config.
@@ -291,11 +307,21 @@ const upload = multer({
 
 // 1. Auth Endpoints
 app.post('/api/auth/login', checkLoginRateLimit, (req: Request, res: Response) => {
+  // Allow secure local setup to take effect without restarting the preview.
+  // An explicit ADMIN_PASSWORD secret always takes precedence over the file.
+  if (!process.env.ADMIN_PASSWORD && fs.existsSync(AUTH_FILE)) {
+    const persisted = safeReadJson<Partial<AuthConfig> | null>(AUTH_FILE, null);
+    if (persisted?.version === 2 &&
+        typeof persisted.salt === 'string' && /^[0-9a-f]{64}$/i.test(persisted.salt) &&
+        typeof persisted.passwordHash === 'string' && /^[0-9a-f]{128}$/i.test(persisted.passwordHash)) {
+      authConfig = persisted as AuthConfig;
+    }
+  }
   const username: unknown = req.body?.username;
   const password: unknown = req.body?.password;
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (!authConfig) {
-    return res.status(503).json({ error: 'Yönetici hesabı henüz kurulmamış. Sunucuda ADMIN_PASSWORD ayarlanmalıdır.' });
+    return res.status(503).json({ error: 'Yönetici hesabı henüz kurulmamış. Codespaces terminalinde npm run admin:setup komutunu çalıştırın veya ADMIN_PASSWORD gizli ayarını tanımlayın.' });
   }
   if (typeof username !== 'string' || !username.trim() || username.length > 128 ||
       typeof password !== 'string' || !password || password.length > 1024) {
