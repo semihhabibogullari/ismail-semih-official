@@ -110,7 +110,23 @@ export interface SiteSettings {
   cardShadow: 'none' | 'sm' | 'md' | 'lg' | '2xl';
 }
 
-export interface HeroSlide {
+export interface DetailAction {
+  id: string;
+  kind: 'ticket' | 'contact' | 'custom';
+  label: string;
+  label_en?: string;
+  url: string;
+  enabled: boolean;
+}
+
+export interface DetailFields {
+  detailDescription?: string;
+  detailDescription_en?: string;
+  detailVideoUrl?: string;
+  detailActions?: DetailAction[];
+}
+
+export interface HeroSlide extends DetailFields {
   id: string;
   title: string;
   title_en?: string;
@@ -130,7 +146,7 @@ export interface HeroSlide {
 
 export type TicketStatus = 'available' | 'sold_out' | 'free' | 'soon';
 
-export interface EventItem {
+export interface EventItem extends DetailFields {
   id: string;
   title: string;
   title_en?: string;
@@ -153,7 +169,7 @@ export interface EventItem {
   published: boolean;
 }
 
-export interface HighlightItem {
+export interface HighlightItem extends DetailFields {
   id: string;
   title: string;
   title_en?: string;
