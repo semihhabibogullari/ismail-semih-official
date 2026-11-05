@@ -25,12 +25,13 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 const groups: Group[] = [
   { key: 'heroSlides', name: 'Ana Slider', icon: SlidersHorizontal, image: 'imageUrl', defaults: {
-    title: 'Yeni slider', title_en: '', subtitle: '', subtitle_en: '', category: 'Tiyatro', imageUrl: '',
+    title: 'Yeni slider', title_en: '', subtitle: '', subtitle_en: '', category: 'Tiyatro', imageUrl: '', mediaType: 'image', videoUrl:'',
     badge: '', buttonText: 'Detayları Gör', buttonText_en: 'View Details', buttonLink: '',
     active: true, order: 1,
   }, fields: [field('title','Başlık'), field('title_en','Başlık · İngilizce'), field('subtitle','Kısa açıklama','textarea'),
     field('subtitle_en','Kısa açıklama · İngilizce','textarea'), field('category','Kategori'),
-    field('badge','Etiket'), field('imageUrl','Afiş / Kapak','image'),
+    field('badge','Etiket'), field('mediaType','Slider medya türü','select',['image','video']),
+    field('imageUrl','Afiş / Kapak','image'), field('videoUrl','Video Yükle veya Link Göm','video'),
     field('buttonText','Slider üstü buton yazısı'), field('buttonLink','Eski bağlantı (detay penceresi açılır)','url'),
     field('active','Görünür','toggle')] },
   { key: 'events', name: 'Etkinlik Takvimi', icon: CalendarDays, image: 'imageUrl', defaults: {
