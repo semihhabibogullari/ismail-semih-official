@@ -85,7 +85,7 @@ export const AdminLoginPage: React.FC = () => {
                 className="w-full px-4 py-3 rounded-xl bg-[#0b0b0f] border border-white/15 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#ff5a1f]"
               />
               <span className="text-[11px] text-gray-500 block mt-1.5">
-                Varsayılan kurulum parolası: <code className="text-[#ff8c42]">semih2026</code>
+                Yönetici parolanız kurulum sırasında güvenli olarak belirlenir.
               </span>
             </div>
 
