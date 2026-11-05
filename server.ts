@@ -170,10 +170,10 @@ if (bootstrapPassword) {
     console.info('Kullanıcı adı:', ADMIN_USERNAME);
     console.info('Geçici şifre:', temporaryPassword);
     console.info('Şifreniz yalnızca bu Codespaces terminal günlüğüne yazıldı.');
-    console.info('Kendinize özel bir şifre belirlemek için: npm run admin:setup');
+    console.info('Kalıcı şifre için GitHub Codespaces Secrets ayarlarını kullanın');
     console.info('=======================================================\n');
   } else {
-    console.warn('Yönetici girişi kapalı: ADMIN_PASSWORD gizli ayarını veya terminalde npm run admin:setup komutunu kullanın.');
+    console.warn('Yönetici girişi kapalı: ADMIN_PASSWORD gizli ayarını kullanın.');
   }
 }
 
@@ -321,7 +321,7 @@ app.post('/api/auth/login', checkLoginRateLimit, (req: Request, res: Response) =
   const password: unknown = req.body?.password;
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
   if (!authConfig) {
-    return res.status(503).json({ error: 'Yönetici hesabı henüz kurulmamış. Codespaces terminalinde npm run admin:setup komutunu çalıştırın veya ADMIN_PASSWORD gizli ayarını tanımlayın.' });
+    return res.status(503).json({ error: 'Yönetici hesabı henüz kurulmamış. Sunucuda ADMIN_PASSWORD gizli ayarını tanımlayın.' });
   }
   if (typeof username !== 'string' || !username.trim() || username.length > 128 ||
       typeof password !== 'string' || !password || password.length > 1024) {
