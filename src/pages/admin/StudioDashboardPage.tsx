@@ -268,7 +268,7 @@ export const StudioDashboardPage: React.FC = () => {
       </div>
     </header>
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
-      {feedback&&<p role="status" className={\`flex gap-2 items-center p-3 rounded-xl text-sm border \${feedback.ok?'bg-emerald-950/20 border-emerald-600/30 text-emerald-300':'bg-red-950/20 border-red-600/30 text-red-300'}\`}>
+      {feedback&&<p role="status" className={`flex gap-2 items-center p-3 rounded-xl text-sm border ${feedback.ok?'bg-emerald-950/20 border-emerald-600/30 text-emerald-300':'bg-red-950/20 border-red-600/30 text-red-300'}`}>
         {feedback.ok?<CheckCircle2 size={18}/>:<AlertCircle size={18}/>} {feedback.text}</p>}
       {isDirty&&<p className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-2 text-amber-300 text-xs">
         Kaydedilmemiş düzenlemeler var. Sayfayı kapatmadan önce <b>Taslağı Kaydet</b> seçin.
@@ -400,7 +400,7 @@ export const StudioDashboardPage: React.FC = () => {
         <h2 className="text-xl font-bold">Genel Site Ayarları</h2>
         <div className="flex flex-wrap gap-2">
           {([['brand','Marka / Logo',ImageIcon],['colors','Renkler',Palette],['fonts','Fontlar',Type],['sizing','Ölçüler',LayoutGrid],['seo','SEO',Globe2],['social','İletişim / Sosyal',Mail]] as const).map(([id,label,Icon])=>
-            <button type="button" key={id} onClick={()=>setSettingsTab(id)} className={\`px-4 py-2.5 rounded-xl inline-flex items-center gap-2 text-xs font-semibold \${settingsTab===id?'bg-[#ff5a1f] text-white':'bg-[#15151c] hover:bg-white/10 text-gray-300'}\`}><Icon size={16}/>{label}</button>)}
+            <button type="button" key={id} onClick={()=>setSettingsTab(id)} className={`px-4 py-2.5 rounded-xl inline-flex items-center gap-2 text-xs font-semibold ${settingsTab===id?'bg-[#ff5a1f] text-white':'bg-[#15151c] hover:bg-white/10 text-gray-300'}`}><Icon size={16}/>{label}</button>)}
         </div>
         <div className={cardClass+' p-4 sm:p-6 space-y-5'}>
           {settingsTab==='brand'&&<>
