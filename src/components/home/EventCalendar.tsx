@@ -354,7 +354,10 @@ export const EventCalendar: React.FC = () => {
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => setSelectedDateStr(dayItem.dateStr)}
+                    onClick={() => {
+                      setSelectedDateStr(dayItem.dateStr);
+                      if (dayEvents.length === 1) showEventDetails(dayEvents[0]);
+                    }}
                     className={`min-h-[100px] sm:min-h-[110px] p-2.5 sm:p-3 rounded-xl text-left transition-all border flex flex-col justify-between cursor-pointer ${
                       isSelected
                         ? 'bg-[#ff5a1f]/20 border-[#ff5a1f] ring-1 ring-[#ff5a1f] shadow-md'
@@ -417,7 +420,10 @@ export const EventCalendar: React.FC = () => {
                     <button
                       key={idx}
                       type="button"
-                      onClick={() => setSelectedDateStr(dayItem.dateStr)}
+                      onClick={() => {
+                        setSelectedDateStr(dayItem.dateStr);
+                        if (dayEvents.length === 1) showEventDetails(dayEvents[0]);
+                      }}
                       className={`relative min-h-[64px] sm:min-h-[76px] p-2 rounded-xl text-left transition-all border flex flex-col justify-between cursor-pointer ${
                         !dayItem.isCurrentMonth
                           ? 'opacity-30 border-transparent bg-transparent'
