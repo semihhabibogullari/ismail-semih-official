@@ -5,7 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 const port = 36181;
 const base = `http://127.0.0.1:${port}`;
 const testPassword = 'local-smoke-password-only-2026!';
-const server = spawn('npm', ['run', 'start'], {
+const server = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
   env: { ...process.env, PORT: String(port), NODE_ENV: 'production', ADMIN_PASSWORD: testPassword },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
