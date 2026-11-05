@@ -133,6 +133,7 @@ export const StudioDashboardPage: React.FC = () => {
   const [feedback,setFeedback] = useState<{ok:boolean;text:string}|null>(null);
   const [confirmDelete,setConfirmDelete] = useState<string|null>(null);
   const [showPreview,setShowPreview] = useState(false);
+  const [previewRevision,setPreviewRevision] = useState(0);
   const [settingsTab,setSettingsTab] = useState<'brand'|'colors'|'fonts'|'sizing'|'seo'|'social'>('brand');
   const [advancedJson,setAdvancedJson] = useState('');
   const [importProblem,setImportProblem] = useState('');
@@ -198,7 +199,7 @@ export const StudioDashboardPage: React.FC = () => {
   const save = async () => {
     setBusy(true);setFeedback(null);
     const r=await saveDraft(local);
-    if(r.success){setDirty(false);setFeedback({ok:true,text:'Taslak kaydedildi. Ziyaretçilere henüz yayınlanmadı.'});}
+    if(r.success){setDirty(false);setPreviewRevision(v=>v+1);setFeedback({ok:true,text:'Taslak kaydedildi. Ziyaretçilere henüz yayınlanmadı.'});}
     else setFeedback({ok:false,text:r.message||'Taslak kaydedilemedi.'});
     setBusy(false);
     return r.success;
@@ -208,10 +209,18 @@ export const StudioDashboardPage: React.FC = () => {
     const before=await saveDraft(local);
     if(!before.success){setBusy(false);setFeedback({ok:false,text:before.message||'Önce taslak kaydedilemedi.'});return;}
     const done=await publishToLive('Yeni Site Stüdyosu üzerinden yayınlandı');
-    setDirty(false);setBusy(false);
+    if(done.success) {setDirty(false);setPreviewRevision(v=>v+1);}
+    setBusy(false);
     setFeedback({ok:done.success,text:done.success?'Site yayınlandı. Değişiklikler ziyaretçilere açık.':done.message||'Yayınlama başarısız.'});
     await refreshData();
   };
+  useEffect(() => {
+    const guard = (event: BeforeUnloadEvent) => {
+      if (isDirty) event.preventDefault();
+    };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [isDirty]);
   const openPanel=(p:Panel)=>{
     setPanel(p);setEditing(null);setSearch('');setFeedback(null);window.scrollTo({top:0,behavior:'smooth'});
   };
@@ -275,9 +284,11 @@ export const StudioDashboardPage: React.FC = () => {
         Kaydedilmemiş düzenlemeler var. Sayfayı kapatmadan önce <b>Taslağı Kaydet</b> seçin.
       </p>}
       {showPreview&&<div className={cardClass+' overflow-hidden'}>
-        <div className="flex justify-between px-4 py-2 items-center border-b border-white/10"><span className="text-sm font-semibold">Canlı Sitenin Önizlemesi</span>
+        <div className="flex justify-between px-4 py-2 items-center border-b border-white/10"><span className="text-sm font-semibold">Kaydedilen Taslağın Önizlemesi</span>
           <Link to="/" target="_blank" rel="noopener noreferrer" className="text-[#ff8c42] text-sm inline-flex gap-1 items-center">Yeni sekmede aç <ArrowRight size={15}/></Link></div>
-        <iframe title="Canlı web sitesi" src="/" className="h-[540px] w-full border-0 bg-white" /></div>}
+        {isDirty && <p className="px-4 py-2 text-xs text-amber-300">Yeni düzenlemeleri bu önizlemede görmek için önce Taslağı Kaydet'e basın.</p>}
+        <iframe key={previewRevision} title="Kaydedilen taslak önizlemesi" src={`/?studio_preview=draft&revision=${previewRevision}`}
+          className="h-[540px] w-full border-0 bg-white" /></div>}
       {!panel?<>
         <section className="flex flex-col sm:flex-row gap-4 justify-between sm:items-end">
           <div><p className="text-xs uppercase tracking-widest font-bold text-[#ff5a1f]">Kontrol Merkezi</p>
