@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useSite } from '../../context/SiteContext';
 import { EventItem, TicketStatus } from '../../types';
+import { DetailModal, DetailModalItem } from '../common/DetailModal';
 
 const MONTH_NAMES_TR = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
@@ -42,6 +43,24 @@ export const EventCalendar: React.FC = () => {
 
   const [currentDate, setCurrentDate] = useState(() => new Date());
   const [selectedDateStr, setSelectedDateStr] = useState<string | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<DetailModalItem | null>(null);
+
+  const showEventDetails = (event: EventItem) => {
+    setSelectedDetail({
+      title: t(event.title, event.title_en),
+      category: t(event.category, event.category_en),
+      description: t(event.detailDescription || event.description, event.detailDescription_en || event.description_en),
+      imageUrl: event.imageUrl,
+      videoUrl: event.detailVideoUrl,
+      meta: [
+        { label: 'Tarih', value: event.date, icon: 'date' },
+        { label: 'Saat', value: event.time, icon: 'time' },
+        { label: 'Mekân', value: t(event.venue, event.venue_en), icon: 'place' },
+        ...(event.price ? [{ label: 'Fiyat', value: event.price }] : []),
+      ] as DetailModalItem['meta'],
+      actions: event.detailActions || [],
+    });
+  };
 
   // Unconditionally defaults to 'week' (Haftalık) on every mount/refresh
   const [calendarView, setCalendarView] = useState<'week' | 'month'>('week');
@@ -335,7 +354,10 @@ export const EventCalendar: React.FC = () => {
                   <button
                     key={idx}
                     type="button"
-                    onClick={() => setSelectedDateStr(dayItem.dateStr)}
+                    onClick={() => {
+                      setSelectedDateStr(dayItem.dateStr);
+                      if (dayEvents.length === 1) showEventDetails(dayEvents[0]);
+                    }}
                     className={`min-h-[100px] sm:min-h-[110px] p-2.5 sm:p-3 rounded-xl text-left transition-all border flex flex-col justify-between cursor-pointer ${
                       isSelected
                         ? 'bg-[#ff5a1f]/20 border-[#ff5a1f] ring-1 ring-[#ff5a1f] shadow-md'
@@ -398,7 +420,10 @@ export const EventCalendar: React.FC = () => {
                     <button
                       key={idx}
                       type="button"
-                      onClick={() => setSelectedDateStr(dayItem.dateStr)}
+                      onClick={() => {
+                        setSelectedDateStr(dayItem.dateStr);
+                        if (dayEvents.length === 1) showEventDetails(dayEvents[0]);
+                      }}
                       className={`relative min-h-[64px] sm:min-h-[76px] p-2 rounded-xl text-left transition-all border flex flex-col justify-between cursor-pointer ${
                         !dayItem.isCurrentMonth
                           ? 'opacity-30 border-transparent bg-transparent'
@@ -543,27 +568,13 @@ export const EventCalendar: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Action button */}
-                    <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
-                      {event.ticketUrl ? (
-                        <a
-                          href={event.ticketUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs font-semibold transition-colors shadow-sm"
-                        >
-                          <Ticket className="w-3.5 h-3.5" />
-                          <span>{t('Bilet Al', 'Buy Tickets')}</span>
-                          <ExternalLink className="w-3 h-3 ml-0.5" />
-                        </a>
-                      ) : (
-                        <Link
-                          to="/etkinlikler"
-                          className="text-xs text-[#ff5a1f] hover:underline font-medium"
-                        >
-                          {t('Detayları Gör', 'View Details')}
-                        </Link>
-                      )}
+                    {/* All CTA links are configured inside the popup by the admin. */}
+                    <div className="mt-4 pt-3 border-t border-white/5">
+                      <button type="button" onClick={() => showEventDetails(event)}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#ff5a1f] text-white text-xs font-semibold hover:bg-[#ff733b] cursor-pointer">
+                        {t('Detayları Gör', 'View Details')}
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -572,6 +583,7 @@ export const EventCalendar: React.FC = () => {
           )}
         </div>
       </div>
+      <DetailModal item={selectedDetail} onClose={() => setSelectedDetail(null)} />
     </section>
   );
 };

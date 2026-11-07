@@ -6,3 +6,13 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Never commit private credentials, admin configuration or visitor records
+data/auth.json
+data/ai-config.json
+data/ai-secret.json
+data/instagram-secret.json
+data/site-data.json
+data/draft-data.json
+data/backups/
+public/uploads/

@@ -11,12 +11,14 @@
     --text-secondary: #9ca3af;
     --heading-font: 'Space Grotesk', system-ui, sans-serif;
     --body-font: 'Inter', system-ui, sans-serif;
+    --body-base-size: 16px;
   }
 
   body {
     background-color: var(--bg-primary);
     color: var(--text-primary);
     font-family: var(--body-font);
+    font-size: var(--body-base-size);
     overflow-x: hidden;
     transition: background-color 0.25s ease, color 0.25s ease;
   }
@@ -38,20 +40,20 @@ html.light {
 }
 
 html.light body {
-  background-color: #f8f8fa !important;
-  color: #0f172a !important;
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
 }
 
 html.light .bg-\[\#0b0b0f\] {
-  background-color: #f8f8fa !important;
+  background-color: var(--bg-primary) !important;
 }
 
 html.light .bg-\[\#121218\] {
-  background-color: #ffffff !important;
+  background-color: var(--bg-secondary) !important;
 }
 
 html.light .bg-\[\#151520\] {
-  background-color: #f4f4f7 !important;
+  background-color: var(--bg-panel) !important;
 }
 
 html.light .bg-\[\#181824\] {
@@ -67,11 +69,11 @@ html.light .border-white\/5 {
 }
 
 html.light .text-white {
-  color: #0f172a !important;
+  color: var(--text-primary) !important;
 }
 
 html.light .text-\[\#f1f1f4\] {
-  color: #0f172a !important;
+  color: var(--text-primary) !important;
 }
 
 html.light .text-gray-200 {
@@ -145,4 +147,58 @@ html.light ::-webkit-scrollbar-thumb {
 
 .animate-kenburns {
   animation: kenburnsZoom 7s ease-out forwards;
+}
+
+
+/* Brand controls from the Site Stüdyosu. Only the exact accent utilities are
+   overridden; semantic muted/translucent colors remain unchanged. */
+.bg-\[\#ff5a1f\] { background-color: var(--accent) !important; }
+.text-\[\#ff5a1f\] { color: var(--accent) !important; }
+.border-\[\#ff5a1f\] { border-color: var(--accent) !important; }
+.hover\:bg-\[\#ff733b\]:hover { background-color: var(--accent) !important; }
+/* Preserve button contrast when light theme styles rewrite generic text-white. */
+html.light .bg-\[\#ff5a1f\].text-white { color: #fff !important; }
+
+
+/* Individual homepage block styling. Every selector is scoped to its own
+   section so changes cannot leak into the navigation, footer or other blocks. */
+.studio-section[data-style-heading="true"] :is(h2, h3, h4) {
+  color: var(--section-heading-color) !important;
+}
+.studio-section[data-style-text="true"] :is(p, blockquote, .text-gray-200, .text-gray-300, .text-gray-400, .text-\[\#f1f1f4\]) {
+  color: var(--section-text-color) !important;
+}
+.studio-section[data-style-heading-font="true"] :is(h2, h3, h4) {
+  font-family: var(--section-heading-font) !important;
+}
+.studio-section[data-style-body-font="true"] :is(p, blockquote, button, a, input, textarea) {
+  font-family: var(--section-body-font) !important;
+}
+.studio-section[data-style-heading-size="true"] h2 {
+  font-size: var(--section-heading-size) !important;
+}
+.studio-section[data-style-card-title-size="true"] :is(h3, h4) {
+  font-size: var(--section-card-title-size) !important;
+}
+.studio-section[data-style-text-size="true"] :is(p, blockquote) {
+  font-size: var(--section-text-size) !important;
+}
+.studio-section[data-style-card="true"] :is(.bg-\[\#121218\], .bg-\[\#151520\], .bg-\[\#181824\]) {
+  background-color: var(--section-card-color) !important;
+}
+.studio-section[data-style-border="true"] :is(.border-white\/10, .border-white\/5, .border-white\/15) {
+  border-color: var(--section-border-color) !important;
+}
+.studio-section[data-style-button="true"] :is(a, button).bg-\[\#ff5a1f\] {
+  background-color: var(--section-button-color) !important;
+  color: var(--section-button-text-color) !important;
+}
+.studio-section[data-style-button="true"] :is(a, button).hover\:bg-\[\#ff733b\]:hover {
+  background-color: var(--section-button-color) !important;
+}
+.studio-section[data-style-shadow="true"] :is(.shadow-xl, .shadow-2xl, .shadow-lg, .shadow-md, .shadow-sm) {
+  box-shadow: var(--section-shadow) !important;
+}
+.studio-section[data-style-radius="true"] :is(.rounded-lg, .rounded-xl, .rounded-2xl, .rounded-3xl) {
+  border-radius: var(--section-radius) !important;
 }

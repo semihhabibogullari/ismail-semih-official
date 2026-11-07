@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { DetailModal, DetailModalItem } from '../common/DetailModal';
 import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { useSite } from '../../context/SiteContext';
 
@@ -19,6 +19,7 @@ export const HeroSlider: React.FC = () => {
   };
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [selectedDetail, setSelectedDetail] = useState<DetailModalItem | null>(null);
   const [isPaused, setIsPaused] = useState(false);
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
@@ -63,6 +64,17 @@ export const HeroSlider: React.FC = () => {
     touchEndX.current = null;
   };
 
+  const openSlideDetails = (slide: typeof slides[number]) => {
+    setSelectedDetail({
+      title: t(slide.title, slide.title_en),
+      category: t(slide.category, slide.category_en),
+      description: t(slide.detailDescription || slide.subtitle, slide.detailDescription_en || slide.subtitle_en),
+      imageUrl: slide.imageUrl,
+      videoUrl: slide.detailVideoUrl || slide.videoUrl,
+      actions: slide.detailActions || [],
+    });
+  };
+
   if (slideCount === 0) return null;
 
   const transitionType = sliderSettings.transitionType || 'kenburns-crossfade';
@@ -70,7 +82,7 @@ export const HeroSlider: React.FC = () => {
   return (
     <section className="relative w-full pt-4 pb-8" aria-label="Öne Çıkan Slider">
       {/* Container: Centered, strictly max 1200px width */}
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6">
+      <div className="mx-auto px-4 sm:px-6" style={{ maxWidth: Math.max(600, Math.min(1920, data.sections?.find(x => x.type === 'hero')?.maxWidth || 1200)) }}>
         <div
           className="relative w-full rounded-2xl overflow-hidden border border-white/10 bg-[#121218] shadow-2xl group"
           onMouseEnter={() => setIsPaused(true)}
@@ -101,19 +113,27 @@ export const HeroSlider: React.FC = () => {
                     isActive ? 'opacity-100 z-10' : 'opacity-0 z-0 pointer-events-none'
                   }`}
                 >
-                  {/* Slide Background Image */}
-                  <img
-                    src={slide.imageUrl}
-                    alt={t(slide.title, slide.title_en)}
-                    className={imageAnimationClass}
-                    loading={index === 0 ? 'eager' : 'lazy'}
-                  />
+                  {/* Image or direct MP4/WebM background, with cover fallback for embeds. */}
+                  {slide.mediaType === 'video' && slide.videoUrl &&
+                    /\.(mp4|webm)(?:[?#]|$)/i.test(slide.videoUrl) ? (
+                    <video src={slide.videoUrl} poster={slide.imageUrl} muted loop autoPlay playsInline
+                      aria-label={t(slide.title, slide.title_en)} className="w-full h-full object-cover" />
+                  ) : (
+                    <img src={slide.imageUrl} alt={t(slide.title, slide.title_en)}
+                      className={imageAnimationClass} loading={index === 0 ? 'eager' : 'lazy'} />
+                  )}
 
                   {/* Gradient Scrim for WCAG readability */}
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0f] via-[#0b0b0f]/60 to-transparent lg:bg-gradient-to-r lg:from-[#0b0b0f]/90 lg:via-[#0b0b0f]/60 lg:to-transparent" />
 
+                  {/* Entire slide background opens its detail, not just the CTA. */}
+                  <button type="button" onClick={() => openSlideDetails(slide)}
+                    tabIndex={isActive ? 0 : -1}
+                    aria-label={`${t(slide.title, slide.title_en)} — ${t('Detayları Gör', 'View Details')}`}
+                    className="absolute inset-0 z-[1] cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#ff5a1f]" />
+
                   {/* Content Overlay */}
-                  <div className="absolute inset-0 flex flex-col justify-end lg:justify-center p-6 sm:p-10 lg:p-12 max-w-2xl">
+                  <div className="absolute inset-0 z-[2] pointer-events-none flex flex-col justify-end lg:justify-center p-6 sm:p-10 lg:p-12 max-w-2xl">
                     {/* Category & Badge */}
                     <div className="flex items-center gap-2 mb-2 text-xs font-semibold tracking-wider text-[#ff5a1f]">
                       {slide.badge && (
@@ -135,15 +155,14 @@ export const HeroSlider: React.FC = () => {
                     </p>
 
                     {/* CTA Button */}
-                    {slide.buttonText && (
+                    {(slide.buttonText || slide.title) && (
                       <div>
-                        <Link
-                          to={slide.buttonLink || '/etkinlikler'}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs sm:text-sm font-semibold transition-all transform hover:translate-x-0.5 shadow-lg shadow-[#ff5a1f]/20 focus:outline-none focus:ring-2 focus:ring-[#ff5a1f]"
+                        <button type="button" onClick={() => openSlideDetails(slide)}
+                          className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs sm:text-sm font-semibold transition-all transform hover:translate-x-0.5 shadow-lg shadow-[#ff5a1f]/20 focus:outline-none focus:ring-2 focus:ring-[#ff5a1f] cursor-pointer"
                         >
-                          <span>{t(slide.buttonText, slide.buttonText_en)}</span>
+                          <span>{t('Detayları Gör', 'View Details')}</span>
                           <ArrowRight className="w-4 h-4" />
-                        </Link>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -194,6 +213,7 @@ export const HeroSlider: React.FC = () => {
           </div>
         </div>
       </div>
+      <DetailModal item={selectedDetail} onClose={() => setSelectedDetail(null)} />
     </section>
   );
 };

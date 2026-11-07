@@ -14,6 +14,7 @@ import { AiSection } from '../components/home/AiSection';
 import { TrainingsSection } from '../components/home/TrainingsSection';
 import { PressSection } from '../components/home/PressSection';
 import { NewsletterSection } from '../components/home/NewsletterSection';
+import { buildSectionPresentation } from '../utils/sectionAppearance';
 
 export const HomePage: React.FC = () => {
   const { data } = useSite();
@@ -51,7 +52,18 @@ export const HomePage: React.FC = () => {
 
   return (
     <div className="w-full">
-      {sortedSections.map((sec) => renderSection(sec.type, sec.id))}
+      {sortedSections.map((sec) => (
+        <div key={sec.id} {...buildSectionPresentation(sec.appearance)} style={{
+          ...buildSectionPresentation(sec.appearance).style,
+          maxWidth: sec.maxWidth ? `${Math.max(600,Math.min(1920,sec.maxWidth))}px` : undefined,
+          minHeight: sec.minHeight ? `${Math.max(0,Math.min(1200,sec.minHeight))}px` : undefined,
+          paddingTop: sec.paddingY !== undefined ? `${Math.max(0,Math.min(160,sec.paddingY))}px` : undefined,
+          paddingBottom: sec.paddingY !== undefined ? `${Math.max(0,Math.min(160,sec.paddingY))}px` : undefined,
+          marginInline: sec.maxWidth ? 'auto' : undefined,
+        }}>
+          {renderSection(sec.type, sec.id)}
+        </div>
+      ))}
     </div>
   );
 };

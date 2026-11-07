@@ -1,0 +1,30 @@
+name: Validate preview build
+on:
+  pull_request:
+  push:
+    branches:
+      - security/admin-auth-and-secrets-hardening
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npm run lint
+      - run: npm run build
+      - run: node --import tsx scripts/test-section-appearance.mjs
+      - run: node scripts/smoke-test.mjs
+      - run: npm run export:full
+      - run: |
+          python3 - <<'PY'
+          import zipfile
+          z=zipfile.ZipFile('ismail-semih-studio-tam-paket.zip')
+          names=z.namelist()
+          assert any(p.endswith('/src/App.tsx') for p in names)
+          assert any(p.endswith('/scripts/export-full-site.sh') for p in names)
+          assert all(not any(x in p for x in ['/data/auth.json','/data/ai-secret.json','/data/messages.json','/data/subscribers.json']) for p in names)
+          print('ZIP archive verified: source included and sensitive files excluded')
+          PY

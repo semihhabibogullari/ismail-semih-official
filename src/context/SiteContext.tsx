@@ -30,7 +30,7 @@ interface SiteContextType {
   saveDraft: (updatedData: Partial<SiteData>) => Promise<{ success: boolean; message?: string }>;
   publishToLive: (note?: string) => Promise<{ success: boolean; message?: string }>;
   restoreBackup: (backupId: string) => Promise<{ success: boolean; message?: string }>;
-  login: (password: string) => Promise<{ success: boolean; error?: string }>;
+  login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   // AI Assistant helpers
   sendAiCommand: (command: string) => Promise<{ success: boolean; proposal?: AiProposal; message?: string; error?: string }>;
@@ -43,7 +43,9 @@ const SiteContext = createContext<SiteContextType | undefined>(undefined);
 export function SiteProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<SiteData>(initialSiteData);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [isDraftMode, setIsDraftMode] = useState<boolean>(false);
+  const [isDraftMode, setIsDraftMode] = useState<boolean>(() =>
+    new URLSearchParams(window.location.search).get('studio_preview') === 'draft'
+  );
   const [hasDraftChanges, setHasDraftChanges] = useState<boolean>(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [token, setToken] = useState<string | null>(null);
@@ -103,9 +105,15 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     const headingFont = typography.headingFont || 'Space Grotesk';
     const bodyFont = typography.bodyFont || 'Inter';
 
-    const fontsToLoad = [headingFont, bodyFont].filter(
-      (f) => !['Inter', 'Space Grotesk', 'sans-serif', 'serif', 'monospace'].includes(f)
-    );
+    const sectionFonts = (data.sections || []).flatMap(section =>
+      [section.appearance?.headingFont, section.appearance?.bodyFont]
+    ).filter((font): font is string => typeof font === 'string' && font.length > 0);
+    const allowedGoogleFonts = new Set([
+      'Inter', 'Space Grotesk', 'Montserrat', 'Poppins', 'Roboto', 'Open Sans',
+      'Lato', 'Playfair Display', 'Merriweather', 'Oswald', 'DM Sans', 'Source Sans 3',
+    ]);
+    const fontsToLoad = [...new Set([headingFont, bodyFont, ...sectionFonts])]
+      .filter(font => allowedGoogleFonts.has(font));
 
     if (fontsToLoad.length > 0) {
       const fontQuery = fontsToLoad.map((f) => `family=${f.replace(/ /g, '+')}:wght@400;600;700`).join('&');
@@ -123,7 +131,72 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     // Set CSS font family variables
     document.documentElement.style.setProperty('--heading-font', `"${headingFont}", sans-serif`);
     document.documentElement.style.setProperty('--body-font', `"${bodyFont}", sans-serif`);
-  }, [data.settings?.typography]);
+  }, [data.settings?.typography, data.sections]);
+
+  // Keep published brand colors in sync with the public pages. Restrict CSS
+  // inputs to valid hex colors instead of interpolating arbitrary user strings.
+  useEffect(() => {
+    const palette = theme === 'light' ? data.settings?.lightTheme : data.settings?.darkTheme;
+    if (!palette) return;
+    const root = document.documentElement;
+    const tokens: Record<string, string> = {
+      '--bg-primary': palette.bgPrimary,
+      '--bg-secondary': palette.bgSecondary,
+      '--bg-panel': palette.panelBg,
+      '--accent': palette.accentColor,
+      '--text-primary': palette.textPrimary,
+      '--text-secondary': palette.textSecondary,
+    };
+    for (const [name, value] of Object.entries(tokens)) {
+      if (typeof value === 'string' && /^#(?:[0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value)) {
+        root.style.setProperty(name, value);
+      }
+    }
+    const size = data.settings?.typography?.baseSize;
+    if (typeof size === 'string' && /^(1[2-9]|2[0-4])px$/.test(size)) {
+      root.style.setProperty('--body-base-size', size);
+    }
+  }, [data.settings?.darkTheme, data.settings?.lightTheme, data.settings?.typography?.baseSize, theme]);
+
+  // Update browser metadata whenever the language or published settings change.
+  useEffect(() => {
+    const localized = (tr?: string, en?: string) =>
+      language === 'en' && en?.trim() ? en : (tr || '');
+    const title = localized(
+      data.seo?.title || data.settings?.siteTitle,
+      data.seo?.title_en || data.settings?.siteTitle_en
+    );
+    if (title) document.title = title;
+    const description = localized(data.seo?.description, data.seo?.description_en);
+    const ensureMeta = (name: string, content: string, attr: 'name' | 'property' = 'name') => {
+      let node = document.querySelector<HTMLMetaElement>(`meta[${attr}="${name}"]`);
+      if (!node) {
+        node = document.createElement('meta');
+        node.setAttribute(attr, name);
+        document.head.appendChild(node);
+      }
+      node.content = content;
+    };
+    if (description) {
+      ensureMeta('description', description);
+      ensureMeta('og:description', description, 'property');
+    }
+    if (title) ensureMeta('og:title', title, 'property');
+    ensureMeta('robots', data.seo?.robotsIndex === false ? 'noindex, nofollow' : 'index, follow');
+    const icon = data.settings?.faviconUrl;
+    if (typeof icon === 'string' && icon) {
+      let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+      if (!favicon) {
+        favicon = document.createElement('link');
+        favicon.rel = 'icon';
+        document.head.appendChild(favicon);
+      }
+      try {
+        const url = new URL(icon, window.location.origin);
+        if (['https:', 'http:'].includes(url.protocol)) favicon.href = url.href;
+      } catch {}
+    }
+  }, [data.seo, data.settings?.siteTitle, data.settings?.siteTitle_en, data.settings?.faviconUrl, language]);
 
   // Persistent Admin Experience Mode ('easy' | 'advanced' | 'expert')
   const [experienceMode, setExperienceModeState] = useState<ExperienceMode>(() => {
@@ -270,12 +343,12 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const login = async (password: string): Promise<{ success: boolean; error?: string }> => {
+  const login = async (username: string, password: string): Promise<{ success: boolean; error?: string }> => {
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
       });
       const json = await res.json();
       if (res.ok && json.success) {

@@ -110,7 +110,23 @@ export interface SiteSettings {
   cardShadow: 'none' | 'sm' | 'md' | 'lg' | '2xl';
 }
 
-export interface HeroSlide {
+export interface DetailAction {
+  id: string;
+  kind: 'ticket' | 'contact' | 'custom';
+  label: string;
+  label_en?: string;
+  url: string;
+  enabled: boolean;
+}
+
+export interface DetailFields {
+  detailDescription?: string;
+  detailDescription_en?: string;
+  detailVideoUrl?: string;
+  detailActions?: DetailAction[];
+}
+
+export interface HeroSlide extends DetailFields {
   id: string;
   title: string;
   title_en?: string;
@@ -121,6 +137,8 @@ export interface HeroSlide {
   badge?: string;
   badge_en?: string;
   imageUrl: string;
+  mediaType?: 'image' | 'video';
+  videoUrl?: string;
   buttonText: string;
   buttonText_en?: string;
   buttonLink: string;
@@ -130,7 +148,7 @@ export interface HeroSlide {
 
 export type TicketStatus = 'available' | 'sold_out' | 'free' | 'soon';
 
-export interface EventItem {
+export interface EventItem extends DetailFields {
   id: string;
   title: string;
   title_en?: string;
@@ -153,7 +171,7 @@ export interface EventItem {
   published: boolean;
 }
 
-export interface HighlightItem {
+export interface HighlightItem extends DetailFields {
   id: string;
   title: string;
   title_en?: string;
@@ -251,6 +269,26 @@ export interface PressItem {
   published: boolean;
 }
 
+export interface SectionAppearance {
+  headingColor?: string;
+  textColor?: string;
+  backgroundColor?: string;
+  accentColor?: string;
+  cardColor?: string;
+  borderColor?: string;
+  buttonColor?: string;
+  buttonTextColor?: string;
+  shadowColor?: string;
+  shadowOpacity?: number;
+  shadowBlur?: number;
+  headingFont?: string;
+  bodyFont?: string;
+  headingSize?: number;
+  cardTitleSize?: number;
+  textSize?: number;
+  radius?: number;
+}
+
 export interface SectionConfig {
   id: string;
   type:
@@ -269,6 +307,10 @@ export interface SectionConfig {
   subtitle_en?: string;
   visible: boolean;
   order: number;
+  maxWidth?: number;
+  minHeight?: number;
+  paddingY?: number;
+  appearance?: SectionAppearance;
 }
 
 export interface SeoSettings {
