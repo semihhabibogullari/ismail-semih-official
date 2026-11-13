@@ -11,7 +11,7 @@ import { HighlightItem } from '../../types';
 import { DetailModal, DetailModalItem } from '../common/DetailModal';
 
 export const HighlightsSection: React.FC = () => {
-  const { data, t } = useSite();
+  const { data } = useSite();
   const allHighlights = (data.highlights || [])
     .filter((h) => h.published)
     .sort((a, b) => a.order - b.order);
@@ -21,9 +21,9 @@ export const HighlightsSection: React.FC = () => {
   const [selectedDetail, setSelectedDetail] = useState<DetailModalItem | null>(null);
   const showDetails = (item: HighlightItem) => {
     setSelectedDetail({
-      title: t(item.title, item.title_en),
-      category: t(item.category, item.category_en),
-      description: t(item.detailDescription || item.description, item.detailDescription_en || item.description_en),
+      title: item.title,
+      category: item.category,
+      description: item.detailDescription || item.description,
       imageUrl: item.imageUrl,
       videoUrl: item.detailVideoUrl || item.videoUrl,
       embedUrl: item.detailVideoUrl ? undefined : item.embedUrl,
@@ -106,7 +106,7 @@ export const HighlightsSection: React.FC = () => {
                   <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b0f] via-[#0b0b0f]/50 to-transparent" />
                   <button type="button" onClick={() => showDetails(activeHighlight)}
                     className="absolute inset-0 z-[5] cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#ff5a1f]"
-                    aria-label={`${t(activeHighlight.title, activeHighlight.title_en)} — ${t('Detayları Gör', 'View Details')}`} />
+                    aria-label={`${activeHighlight.title} — ${'Detayları Gör'}`} />
 
                   {/* Play button overlay if item has video */}
                   {activeHighlight.mediaType === 'video' && activeHighlight.videoUrl && (
@@ -123,15 +123,15 @@ export const HighlightsSection: React.FC = () => {
                   <div className="relative z-10 p-6 sm:p-8">
                     <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-[#ff5a1f]">
                       <span className="w-2 h-2 rounded-full bg-[#ff5a1f]" />
-                      <span>{t(activeHighlight.category, activeHighlight.category_en)}</span>
+                      <span>{activeHighlight.category}</span>
                     </div>
 
                     <h3 className="text-xl sm:text-2xl font-bold text-white mb-2 leading-tight">
-                      {t(activeHighlight.title, activeHighlight.title_en)}
+                      {activeHighlight.title}
                     </h3>
 
                     <p className="text-gray-300 text-xs sm:text-sm line-clamp-2 max-w-xl mb-4 leading-relaxed">
-                      {t(activeHighlight.description, activeHighlight.description_en)}
+                      {activeHighlight.description}
                     </p>
 
                     <div className="flex items-center gap-3">
@@ -141,7 +141,7 @@ export const HighlightsSection: React.FC = () => {
                           className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs font-semibold transition-all shadow-md cursor-pointer"
                         >
                           <Film className="w-4 h-4" />
-                          <span>{t('Fragmanı / Önizlemeyi İzle', 'Watch Trailer / Preview')}</span>
+                          <span>Fragmanı / Önizlemeyi İzle</span>
                         </button>
                       ) : null}
 
@@ -149,7 +149,7 @@ export const HighlightsSection: React.FC = () => {
                         <button type="button" onClick={() => showDetails(activeHighlight)}
                           className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium transition-colors"
                         >
-                          <span>{t(activeHighlight.linkText || 'Detayları İncele', activeHighlight.linkText_en || 'View Details')}</span>
+                          <span>{activeHighlight.linkText || 'Detayları İncele'}</span>
                           <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       )}
@@ -191,7 +191,7 @@ export const HighlightsSection: React.FC = () => {
                     <div className="flex-1">
                       <div className="flex items-center gap-2 text-[11px] font-semibold text-gray-400 mb-1">
                         <span className="text-[#ff5a1f] font-mono">0{index + 1}.</span>
-                        <span>{t(item.category, item.category_en)}</span>
+                        <span>{item.category}</span>
                       </div>
 
                       <h4
@@ -199,11 +199,11 @@ export const HighlightsSection: React.FC = () => {
                           isSelected ? 'text-[#ff5a1f]' : 'text-gray-200 group-hover:text-white'
                         }`}
                       >
-                        {t(item.title, item.title_en)}
+                        {item.title}
                       </h4>
 
                       <p className="text-xs text-gray-400 line-clamp-2 mt-1">
-                        {t(item.description, item.description_en)}
+                        {item.description}
                       </p>
                     </div>
 

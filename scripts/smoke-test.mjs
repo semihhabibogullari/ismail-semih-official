@@ -78,11 +78,12 @@ try {
   assert.equal(instagram.status, 200);
   assert.equal(JSON.stringify(await instagram.json()).includes('"accessToken"'), false);
 
-  const ai = await request('/api/ai/config', { headers: { cookie } });
-  assert.equal(ai.status, 200);
-  const aiJson = await ai.json();
-  assert.ok(aiJson.config);
-  assert.ok(!aiJson.config.openaiApiKey);
+  for (const aiPath of ['/api/ai/config', '/api/ai/command', '/api/ai/translate']) {
+    for (const method of ['GET', 'POST']) {
+      const removedAi = await request(aiPath, { method, headers: { cookie, 'content-type': 'application/json' }, body: method === 'POST' ? '{}' : undefined });
+      assert.equal(removedAi.status, 404, `${method} ${aiPath} must be gone`);
+    }
+  }
 
   const noPreview = await request('/api/video/preview', {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -189,6 +190,23 @@ try {
   const subsAfter = (await (await request('/api/newsletter/list', { headers: { cookie } })).json()).subscribers;
   assert.equal(subsAfter.some((s) => s.id === sub.id), false, 'Subscriber can be deleted');
 
+  // Turkish-only: legacy *_en keys are stripped from imported / restored data.
+  const legacy = JSON.parse(JSON.stringify(publicJson.data));
+  legacy.settings.siteTitle_en = 'Legacy English title';
+  legacy.menu[0].label_en = 'Home';
+  legacy.events[0].title_en = 'English event';
+  legacy.trainings[0].syllabus_en = ['Week 1'];
+  legacy.about.extra = { nested_en: 'x', keep: 'tr' };
+  const imported = await request('/api/site/import', {
+    method: 'POST', headers: { cookie, ...json }, body: JSON.stringify({ data: legacy }),
+  });
+  assert.equal(imported.status, 200, 'Legacy data with _en keys can be imported');
+  const importedDraft = await (await request('/api/site/draft', { headers: { cookie } })).json();
+  const importedText = JSON.stringify(importedDraft.data);
+  assert.equal(/"[A-Za-z0-9]+_en"\s*:/.test(importedText), false, 'No *_en keys remain after import');
+  assert.equal(importedDraft.data.menu[0].label, legacy.menu[0].label, 'Turkish content is preserved');
+  assert.equal(importedDraft.data.about.extra.keep, 'tr');
+
   const exported = await request('/api/site/export', { headers: { cookie } });
   assert.equal(exported.status, 200);
   assert.ok((await exported.json()).data?.settings, 'Server export contains site data');
@@ -214,7 +232,7 @@ try {
   const oldSession = await request('/api/site/draft', { headers: { cookie } });
   assert.equal(oldSession.status, 401);
 
-  process.stdout.write('PASS: public data, login/logout, cookie auth, secret isolation, URL preview permission.\n');
+  process.stdout.write('PASS: public data, login/logout, cookie auth, secret isolation, URL preview permission, removed AI endpoints, _en cleanup.\n');
 } catch (error) {
   process.stderr.write('SMOKE TEST FAILED: ' + error.stack + '\n' + logs.slice(-1800) + '\n');
   process.exitCode = 1;

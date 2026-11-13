@@ -13,7 +13,6 @@
     "export:full": "bash scripts/export-full-site.sh"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
     "cookie-parser": "^1.4.7",

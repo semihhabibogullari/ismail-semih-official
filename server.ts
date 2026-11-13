@@ -12,7 +12,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { initialSiteData } from './src/data/initialData';
-import { SiteData, AiConfig } from './src/types';
+import { SiteData } from './src/types';
 
 dotenv.config();
 
@@ -32,8 +32,6 @@ const DRAFT_DATA_FILE = path.resolve(DATA_DIR, 'draft-data.json');
 const MESSAGES_FILE = path.resolve(DATA_DIR, 'messages.json');
 const SUBSCRIBERS_FILE = path.resolve(DATA_DIR, 'subscribers.json');
 const AUTH_FILE = path.resolve(DATA_DIR, 'auth.json');
-const AI_CONFIG_FILE = path.resolve(DATA_DIR, 'ai-config.json');
-const AI_SECRET_FILE = path.resolve(DATA_DIR, 'ai-secret.json');
 const INSTAGRAM_SECRET_FILE = path.resolve(DATA_DIR, 'instagram-secret.json');
 
 // Ensure directories exist
@@ -65,8 +63,24 @@ function safeReadJson<T>(filePath: string, defaultValue: T): T {
   }
 }
 
+// Site is Turkish-only: drop every legacy "*_en" key (recursively) from any loaded
+// SiteData (published, draft, backups, imports) so old files still open cleanly.
+function stripEnglishKeys<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => stripEnglishKeys(item)) as unknown as T;
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      if (key.endsWith('_en')) continue;
+      out[key] = stripEnglishKeys(val);
+    }
+    return out as T;
+  }
+  return value;
+}
+
 // Deep merge helper to ensure backward compatibility with earlier data files
-function migrateSiteData(existing: any, defaults: SiteData): SiteData {
+function migrateSiteData(rawExisting: any, defaults: SiteData): SiteData {
+  const existing = stripEnglishKeys(rawExisting);
   if (!existing || typeof existing !== 'object') return defaults;
 
   // Never copy credential fields into public site data, drafts, or backups.
@@ -181,32 +195,6 @@ if (bootstrapPassword) {
   } else {
     console.warn('Yönetici girişi kapalı: ADMIN_PASSWORD gizli ayarını kullanın.');
   }
-}
-
-// Store API credentials separately from published site data and normal config.
-const defaultAiConfig: AiConfig = {
-  provider: 'openai',
-  model: 'gpt-4o-mini',
-  costLimitDaily: 10,
-  enabledCapabilities: {
-    designAssistant: true,
-    contentAssistant: true,
-    translationAssistant: true,
-    seoAssistant: true,
-  },
-};
-const loadedAiConfig = safeReadJson<AiConfig>(AI_CONFIG_FILE, defaultAiConfig);
-const { openaiApiKey: legacyAiKey, ...nonSecretAiConfig } = loadedAiConfig;
-let aiConfig: AiConfig = nonSecretAiConfig;
-// Migrate an existing API key out of the ordinary settings file.
-if (legacyAiKey && !fs.existsSync(AI_SECRET_FILE)) {
-  safeWriteJson(AI_SECRET_FILE, { openaiApiKey: legacyAiKey });
-}
-if (legacyAiKey) safeWriteJson(AI_CONFIG_FILE, aiConfig);
-function hasOpenAiKey(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY ||
-    (fs.existsSync(AI_SECRET_FILE) &&
-      safeReadJson<{ openaiApiKey?: string }>(AI_SECRET_FILE, {}).openaiApiKey));
 }
 
 // Sessions are opaque, HttpOnly-cookie-only and expire server-side.
@@ -718,184 +706,6 @@ app.post('/api/instagram/sync', requireAuth, async (_req: Request, res: Response
   });
 });
 
-// 6. OpenAI & AI Assistant Endpoints
-app.get('/api/ai/config', requireAuth, (_req: Request, res: Response) => {
-  res.json({
-    config: { ...aiConfig, openaiApiKey: '' },
-    provider: aiConfig.provider,
-    model: aiConfig.model,
-    costLimitDaily: aiConfig.costLimitDaily,
-    enabledCapabilities: aiConfig.enabledCapabilities,
-    hasApiKey: hasOpenAiKey(),
-  });
-});
-
-app.post('/api/ai/config', requireAuth, (req: Request, res: Response) => {
-  const { openaiApiKey, model, costLimitDaily, enabledCapabilities } = req.body || {};
-  if (typeof openaiApiKey === 'string' && openaiApiKey.trim()) {
-    safeWriteJson(AI_SECRET_FILE, { openaiApiKey: openaiApiKey.trim() });
-  }
-  aiConfig = {
-    ...aiConfig,
-    ...(typeof model === 'string' && model.length <= 100 ? { model } : {}),
-    ...(Number.isFinite(Number(costLimitDaily)) && Number(costLimitDaily) > 0
-      ? { costLimitDaily: Number(costLimitDaily) } : {}),
-    ...(enabledCapabilities && typeof enabledCapabilities === 'object'
-      ? { enabledCapabilities } : {}),
-  };
-  // Never write credentials into this ordinary settings file.
-  delete aiConfig.openaiApiKey;
-  safeWriteJson(AI_CONFIG_FILE, aiConfig);
-  return res.json({ success: true, message: 'AI ayarları kaydedildi. API anahtarı ayrı, sunucu tarafında tutuluyor.' });
-});
-
-// Natural Language AI Command Router with structured proposal output
-app.post('/api/ai/command', requireAuth, async (req: Request, res: Response) => {
-  const { command } = req.body;
-  if (!command || typeof command !== 'string') {
-    return res.status(400).json({ error: 'Komut metni gereklidir.' });
-  }
-
-  const cleanCmd = command.toLowerCase().trim();
-
-  // Smart natural language intent parser for website operations
-  let proposal: any = null;
-
-  if (cleanCmd.includes('font') || cleanCmd.includes('yazı tipi')) {
-    let fontName = 'Space Grotesk';
-    if (cleanCmd.includes('playfair')) fontName = 'Playfair Display';
-    else if (cleanCmd.includes('outfit')) fontName = 'Outfit';
-    else if (cleanCmd.includes('cinzel')) fontName = 'Cinzel';
-    else if (cleanCmd.includes('inter')) fontName = 'Inter';
-    else if (cleanCmd.includes('plus jakarta')) fontName = 'Plus Jakarta Sans';
-    else if (cleanCmd.includes('tiyatral') || cleanCmd.includes('klasik')) fontName = 'Playfair Display';
-
-    proposal = {
-      type: 'typography_change',
-      target: 'Başlık Fontu',
-      field: 'settings.typography.headingFont',
-      oldValue: draftData.settings.typography.headingFont,
-      newValue: fontName,
-      reason: `Kullanıcı komutu doğrultusunda başlık fontunu "${fontName}" olarak güncelleme önerisi.`,
-    };
-  } else if (cleanCmd.includes('renk') || cleanCmd.includes('turuncu') || cleanCmd.includes('vurgu')) {
-    let newAccent = '#ff5a1f';
-    if (cleanCmd.includes('kehribar') || cleanCmd.includes('amber')) newAccent = '#f59e0b';
-    else if (cleanCmd.includes('kırmızı') || cleanCmd.includes('bordo')) newAccent = '#e11d48';
-    else if (cleanCmd.includes('altın') || cleanCmd.includes('gold')) newAccent = '#d97706';
-
-    proposal = {
-      type: 'color_change',
-      target: 'Marka Vurgu Rengi',
-      field: 'settings.primaryColor',
-      oldValue: draftData.settings.primaryColor,
-      newValue: newAccent,
-      reason: `Tasarım vurgu rengini "${newAccent}" paletine dönüştürme önerisi.`,
-    };
-  } else if (cleanCmd.includes('slider') || cleanCmd.includes('geçiş')) {
-    let transition = 'kenburns-crossfade';
-    if (cleanCmd.includes('fade')) transition = 'crossfade';
-    else if (cleanCmd.includes('zoom')) transition = 'fade-zoom';
-    else if (cleanCmd.includes('slide')) transition = 'soft-slide';
-
-    proposal = {
-      type: 'slider_transition',
-      target: 'Hero Slider Geçiş Animasyonu',
-      field: 'settings.sliderSettings.transitionType',
-      oldValue: draftData.settings.sliderSettings.transitionType,
-      newValue: transition,
-      reason: `Slider geçiş efektini "${transition}" moduna ayarlama önerisi.`,
-    };
-  } else if (cleanCmd.includes('instagram') && (cleanCmd.includes('büyüt') || cleanCmd.includes('kart'))) {
-    proposal = {
-      type: 'instagram_cards',
-      target: 'Instagram Akışı Kart Sayısı',
-      field: 'settings.instagramSettings.postCountDesktop',
-      oldValue: draftData.settings.instagramSettings.postCountDesktop,
-      newValue: 4,
-      reason: 'Masaüstünde daha ferah ve büyük Instagram kartları göstermek için kart sayısını 4 olarak güncelleme önerisi.',
-    };
-  } else if (cleanCmd.includes('çevir') || cleanCmd.includes('ingilizce') || cleanCmd.includes('translate')) {
-    proposal = {
-      type: 'translation_batch',
-      target: 'İçerik Çeviri Asistanı',
-      field: 'i18n',
-      oldValue: 'TR Orijinal',
-      newValue: 'TR + EN İki Dilli',
-      reason: 'Eksik İngilizce içerik alanları için tiyatro terminolojisine uygun taslak çeviriler hazırlandı.',
-    };
-  } else {
-    // General creative advice & copy suggestion
-    proposal = {
-      type: 'content_enhancement',
-      target: 'Site Biyografi & Tanıtım Metni',
-      field: 'settings.bioSummary',
-      oldValue: draftData.settings.bioSummary,
-      newValue: 'İstanbul sahnelerinde çağdaş tiyatro, reji ve dramaturji üretimi; dijital sahne sanatları ve "Ben Bir İsmail" podcast yayıncılığı.',
-      reason: `"${command}" talebi üzerine daha vurucu ve editoryal bir özet hazırlandı.`,
-    };
-  }
-
-  return res.json({
-    success: true,
-    command,
-    proposal,
-    requiresConfirmation: true,
-  });
-});
-
-// AI Translation endpoint (TR <-> EN)
-app.post('/api/ai/translate', requireAuth, async (req: Request, res: Response) => {
-  const { text, from = 'tr', to = 'en' } = req.body;
-  if (!text || typeof text !== 'string') {
-    return res.status(400).json({ error: 'Çevrilecek metin belirtilmelidir.' });
-  }
-
-  // Domain-specific artistic translation dictionary / heuristics
-  const dictionary: Record<string, string> = {
-    'Tiyatro Sanatçısı': 'Theater Artist',
-    'Yönetmen': 'Director',
-    'Eğitmen': 'Instructor',
-    'Podcast Yayıncısı': 'Podcast Host',
-    'Bütün Çılgınlar Sever Beni': 'All the Mad Ones Love Me',
-    'Karanlıkta Komedi': 'Black Comedy',
-    'Bilet Al': 'Get Tickets',
-    'Etkinlik Takvimi': 'Event Calendar',
-    'Öne Çıkanlar': 'Highlights',
-    'Eğitimler & Atölyeler': 'Workshops & Masterclasses',
-    'Hakkımda': 'About',
-    'İletişim': 'Contact',
-    'Basında İsmail Semih': 'Press & Reviews',
-    'Sezon Oyunu': 'Repertory Play',
-    'Yeni Sezon': 'New Season',
-    'Biletler Satışta': 'Tickets On Sale',
-    'Tükendi': 'Sold Out',
-    'Ücretsiz Giriş': 'Free Admission',
-    'Yakında Satışta': 'Coming Soon',
-    'Maksimum': 'Maximum',
-    'Hafta': 'Weeks',
-  };
-
-  let translated = text;
-  Object.keys(dictionary).forEach((key) => {
-    const regex = new RegExp(key, 'gi');
-    translated = translated.replace(regex, dictionary[key]);
-  });
-
-  if (translated === text && from === 'tr' && to === 'en') {
-    // English phrasing fallback
-    translated = `${text} (Contemporary performing arts & stage direction portfolio - English translation)`;
-  }
-
-  return res.json({
-    success: true,
-    original: text,
-    translated,
-    from,
-    to,
-  });
-});
-
 // 7. Media Library & Upload
 app.post('/api/media/upload', requireAuth, upload.single('file'), (req: Request, res: Response) => {
   if (!req.file) {
@@ -1083,6 +893,11 @@ ${urls.map((u) => `  <url><loc>${baseUrl}${u}</loc><lastmod>${new Date().toISOSt
 });
 
 // --- Server Boot ---
+// Unknown API routes (e.g. the removed /api/ai/*) answer 404 JSON, never the SPA shell.
+app.use('/api', (_req: Request, res: Response) => {
+  res.status(404).json({ error: 'Uç bulunamadı.' });
+});
+
 async function startServer() {
   if (!IS_PROD) {
     const { createServer: createViteServer } = await import('vite');

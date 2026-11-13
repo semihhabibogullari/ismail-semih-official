@@ -14,7 +14,6 @@ import {
   Search,
   Sun,
   Moon,
-  Globe,
 } from 'lucide-react';
 import { Logo } from '../common/Logo';
 import { useSite } from '../../context/SiteContext';
@@ -25,11 +24,8 @@ export const Navbar: React.FC = () => {
     isAuthenticated,
     isDraftMode,
     setIsDraftMode,
-    language,
-    setLanguage,
     theme,
     setTheme,
-    t,
   } = useSite();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -58,10 +54,6 @@ export const Navbar: React.FC = () => {
     .sort((a, b) => a.order - b.order);
 
   const social = data.settings?.socialLinks;
-
-  const toggleLanguage = () => {
-    setLanguage(language === 'tr' ? 'en' : 'tr');
-  };
 
   const toggleTheme = () => {
     setTheme(theme === 'dark' ? 'light' : 'dark');
@@ -119,7 +111,7 @@ export const Navbar: React.FC = () => {
               >
                 {({ isActive }) => (
                   <>
-                    {t(item.label, item.label_en)}
+                    {item.label}
                     {isActive && (
                       <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#ff5a1f] rounded-full" />
                     )}
@@ -129,26 +121,8 @@ export const Navbar: React.FC = () => {
             ))}
           </nav>
 
-          {/* Right Action Zone: Language, Theme, Search, Social, Admin */}
+          {/* Right Action Zone: Theme, Search, Social, Admin */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-            {/* TR | EN Language Switcher */}
-            <button
-              type="button"
-              onClick={toggleLanguage}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-gray-200 transition-colors cursor-pointer"
-              aria-label="Dil Değiştir (Language Switch)"
-              title={language === 'tr' ? 'Switch to English' : "Türkçe'ye Geç"}
-            >
-              <Globe className="w-3.5 h-3.5 text-[#ff5a1f]" />
-              <span className={language === 'tr' ? 'text-[#ff5a1f] font-bold' : 'text-gray-400'}>
-                TR
-              </span>
-              <span className="text-gray-500 text-[10px]">/</span>
-              <span className={language === 'en' ? 'text-[#ff5a1f] font-bold' : 'text-gray-400'}>
-                EN
-              </span>
-            </button>
-
             {/* Dark / Light Mode Toggle */}
             <button
               type="button"
@@ -168,7 +142,7 @@ export const Navbar: React.FC = () => {
             <button
               onClick={() => setSearchOpen(!searchOpen)}
               className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-white/5 transition-colors focus:outline-none focus:ring-1 focus:ring-[#ff5a1f] cursor-pointer"
-              aria-label={t('Arama', 'Search')}
+              aria-label="Arama"
             >
               <Search className="w-4 h-4" />
             </button>
@@ -230,10 +204,7 @@ export const Navbar: React.FC = () => {
               <Search className="w-5 h-5 text-[#ff5a1f]" />
               <input
                 type="text"
-                placeholder={t(
-                  'Tiyatro oyunu, podcast, makale veya etkinlik ara...',
-                  'Search theater plays, podcasts, articles, or events...'
-                )}
+                placeholder="Tiyatro oyunu, podcast, makale veya etkinlik ara..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 autoFocus
@@ -244,7 +215,7 @@ export const Navbar: React.FC = () => {
                   onClick={() => setSearchQuery('')}
                   className="text-xs text-gray-400 hover:text-white cursor-pointer"
                 >
-                  {t('Temizle', 'Clear')}
+                  Temizle
                 </button>
               )}
               <button
@@ -257,9 +228,9 @@ export const Navbar: React.FC = () => {
             {/* Quick search suggestions */}
             {searchQuery && (
               <div className="max-w-[800px] mx-auto mt-2 pt-2 border-t border-white/5 text-xs text-gray-400 flex flex-wrap gap-2">
-                <span>{t('Hızlı bağlantılar:', 'Quick links:')}</span>
+                <span>Hızlı bağlantılar:</span>
                 <Link to="/etkinlikler" className="text-[#ff5a1f] hover:underline">
-                  {t('Etkinlik Takvimi', 'Event Calendar')}
+                  Etkinlik Takvimi
                 </Link>
                 <span>·</span>
                 <Link to="/podcast" className="text-[#ff5a1f] hover:underline">
@@ -267,7 +238,7 @@ export const Navbar: React.FC = () => {
                 </Link>
                 <span>·</span>
                 <Link to="/egitimler" className="text-[#ff5a1f] hover:underline">
-                  {t('Oyunculuk Atölyeleri', 'Acting Workshops')}
+                  Oyunculuk Atölyeleri
                 </Link>
               </div>
             )}
@@ -277,20 +248,10 @@ export const Navbar: React.FC = () => {
         {/* Mobile Slide-down Menu */}
         {mobileMenuOpen && (
           <div className="lg:hidden bg-[#0b0b0f] border-b border-white/10 px-6 py-6 space-y-4 animate-in slide-in-from-top-4 duration-200">
-            {/* Language & Theme Controls on Mobile */}
+            {/* Theme Controls on Mobile */}
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
-              <span className="text-xs text-gray-400">{t('Görünüm & Dil', 'Theme & Language')}</span>
+              <span className="text-xs text-gray-400">Görünüm</span>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={toggleLanguage}
-                  className="flex items-center gap-1 px-3 py-1 rounded-lg bg-white/5 border border-white/10 text-xs font-semibold text-gray-200"
-                >
-                  <Globe className="w-3.5 h-3.5 text-[#ff5a1f]" />
-                  <span className={language === 'tr' ? 'text-[#ff5a1f]' : 'text-gray-400'}>TR</span>
-                  <span className="text-gray-500">/</span>
-                  <span className={language === 'en' ? 'text-[#ff5a1f]' : 'text-gray-400'}>EN</span>
-                </button>
                 <button
                   type="button"
                   onClick={toggleTheme}
@@ -319,13 +280,13 @@ export const Navbar: React.FC = () => {
                     }`
                   }
                 >
-                  {t(item.label, item.label_en)}
+                  {item.label}
                 </NavLink>
               ))}
             </nav>
 
             <div className="pt-4 flex items-center justify-between border-t border-white/10">
-              <span className="text-xs text-gray-400">{t('Bizi takip edin', 'Follow us')}</span>
+              <span className="text-xs text-gray-400">Bizi takip edin</span>
               <div className="flex items-center gap-3">
                 {social?.spotify && (
                   <a href={social.spotify} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white p-1">

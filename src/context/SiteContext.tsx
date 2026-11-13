@@ -4,10 +4,9 @@
  */
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { SiteData, AiProposal } from '../types';
+import { SiteData } from '../types';
 import { initialSiteData } from '../data/initialData';
 
-export type LanguageMode = 'tr' | 'en';
 export type ThemeMode = 'dark' | 'light';
 
 interface SiteContextType {
@@ -18,21 +17,14 @@ interface SiteContextType {
   hasDraftChanges: boolean;
   isAuthenticated: boolean;
   token: string | null;
-  language: LanguageMode;
-  setLanguage: (lang: LanguageMode) => void;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
-  t: (trVal?: string, enVal?: string) => string;
   refreshData: () => Promise<void>;
   saveDraft: (updatedData: Partial<SiteData>) => Promise<{ success: boolean; message?: string }>;
   publishToLive: (note?: string) => Promise<{ success: boolean; message?: string }>;
   restoreBackup: (backupId: string) => Promise<{ success: boolean; message?: string }>;
   login: (username: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  // AI Assistant helpers
-  sendAiCommand: (command: string) => Promise<{ success: boolean; proposal?: AiProposal; message?: string; error?: string }>;
-  applyAiProposal: (proposal: AiProposal) => Promise<{ success: boolean; message?: string }>;
-  translateText: (text: string, context?: string) => Promise<string>;
 }
 
 const SiteContext = createContext<SiteContextType | undefined>(undefined);
@@ -46,23 +38,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
   const [hasDraftChanges, setHasDraftChanges] = useState<boolean>(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [token, setToken] = useState<string | null>(null);
-
-  // Persistent Language preference (TR by default)
-  const [language, setLanguageState] = useState<LanguageMode>(() => {
-    try {
-      const saved = localStorage.getItem('ismail_site_lang');
-      return saved === 'en' ? 'en' : 'tr';
-    } catch {
-      return 'tr';
-    }
-  });
-
-  const setLanguage = (lang: LanguageMode) => {
-    setLanguageState(lang);
-    try {
-      localStorage.setItem('ismail_site_lang', lang);
-    } catch {}
-  };
 
   // Persistent Theme preference (Dark by default)
   const [theme, setThemeState] = useState<ThemeMode>(() => {
@@ -155,16 +130,11 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     }
   }, [data.settings?.darkTheme, data.settings?.lightTheme, data.settings?.typography?.baseSize, theme]);
 
-  // Update browser metadata whenever the language or published settings change.
+  // Update browser metadata whenever the published settings change.
   useEffect(() => {
-    const localized = (tr?: string, en?: string) =>
-      language === 'en' && en?.trim() ? en : (tr || '');
-    const title = localized(
-      data.seo?.title || data.settings?.siteTitle,
-      data.seo?.title_en || data.settings?.siteTitle_en
-    );
+    const title = data.seo?.title || data.settings?.siteTitle || '';
     if (title) document.title = title;
-    const description = localized(data.seo?.description, data.seo?.description_en);
+    const description = data.seo?.description || '';
     const ensureMeta = (name: string, content: string, attr: 'name' | 'property' = 'name') => {
       let node = document.querySelector<HTMLMetaElement>(`meta[${attr}="${name}"]`);
       if (!node) {
@@ -193,15 +163,7 @@ export function SiteProvider({ children }: { children: ReactNode }) {
         if (['https:', 'http:'].includes(url.protocol)) favicon.href = url.href;
       } catch {}
     }
-  }, [data.seo, data.settings?.siteTitle, data.settings?.siteTitle_en, data.settings?.faviconUrl, language]);
-
-  // Translation helper: returns English string if active lang is 'en' and translation exists
-  const t = useCallback((trVal?: string, enVal?: string): string => {
-    if (language === 'en' && enVal && enVal.trim().length > 0) {
-      return enVal;
-    }
-    return trVal || '';
-  }, [language]);
+  }, [data.seo, data.settings?.siteTitle, data.settings?.faviconUrl]);
 
   // Check auth status on mount
   const checkAuth = useCallback(async () => {
@@ -352,101 +314,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // AI Assistant: send natural language command to backend
-  const sendAiCommand = async (command: string): Promise<{ success: boolean; proposal?: AiProposal; message?: string; error?: string }> => {
-    try {
-      const res = await fetch('/api/ai/command', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ command }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        return { success: true, proposal: json.proposal, message: json.message };
-      }
-      return { success: false, error: json.error || 'Yapay zekâ yanıt vermedi.' };
-    } catch (err: any) {
-      return { success: false, error: err.message };
-    }
-  };
-
-  // AI Assistant: apply an approved proposal to current site draft
-  const applyAiProposal = async (proposal: AiProposal): Promise<{ success: boolean; message?: string }> => {
-    try {
-      const currentDraft = { ...data };
-      const { targetComponent, field, newValue } = proposal;
-
-      // Handle target component updates
-      if (targetComponent === 'typography') {
-        currentDraft.settings = {
-          ...currentDraft.settings,
-          typography: {
-            ...currentDraft.settings.typography,
-            [field]: newValue,
-          },
-        };
-      } else if (targetComponent === 'slider') {
-        currentDraft.settings = {
-          ...currentDraft.settings,
-          sliderSettings: {
-            ...currentDraft.settings.sliderSettings,
-            [field]: newValue,
-          },
-        };
-      } else if (targetComponent === 'theme') {
-        currentDraft.settings = {
-          ...currentDraft.settings,
-          darkTheme: {
-            ...currentDraft.settings.darkTheme,
-            [field]: newValue,
-          },
-        };
-      } else if (targetComponent === 'brand') {
-        currentDraft.settings = {
-          ...currentDraft.settings,
-          [field]: newValue,
-        };
-      } else if (targetComponent === 'events') {
-        // e.g. bulk update or field update
-        if (Array.isArray(newValue)) {
-          currentDraft.events = newValue;
-        }
-      }
-
-      const saveRes = await saveDraft(currentDraft);
-      if (saveRes.success) {
-        return { success: true, message: 'Yapay zekâ önerisi başarıyla taslağa uygulandı!' };
-      }
-      return { success: false, message: saveRes.message };
-    } catch (err: any) {
-      return { success: false, message: err.message };
-    }
-  };
-
-  // AI Assistant: translation helper
-  const translateText = async (text: string, context?: string): Promise<string> => {
-    try {
-      const res = await fetch('/api/ai/translate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ text, targetLang: 'en', context }),
-      });
-      const json = await res.json();
-      if (res.ok && json.translation) {
-        return json.translation;
-      }
-      return text;
-    } catch {
-      return text;
-    }
-  };
-
   return (
     <SiteContext.Provider
       value={{
@@ -457,20 +324,14 @@ export function SiteProvider({ children }: { children: ReactNode }) {
         hasDraftChanges,
         isAuthenticated,
         token,
-        language,
-        setLanguage,
         theme,
         setTheme,
-        t,
         refreshData,
         saveDraft,
         publishToLive,
         restoreBackup,
         login,
         logout,
-        sendAiCommand,
-        applyAiProposal,
-        translateText,
       }}
     >
       {children}

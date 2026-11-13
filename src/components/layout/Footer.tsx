@@ -10,7 +10,7 @@ import { Logo } from '../common/Logo';
 import { useSite } from '../../context/SiteContext';
 
 export const Footer: React.FC = () => {
-  const { data, isAuthenticated, t } = useSite();
+  const { data, isAuthenticated } = useSite();
   const settings = data.settings;
   const social = settings?.socialLinks;
 
@@ -22,12 +22,8 @@ export const Footer: React.FC = () => {
           <div className="md:col-span-2 space-y-4">
             <Logo customWidth={240} />
             <p className="text-gray-400 text-sm leading-relaxed max-w-md pt-2">
-              {t(
-                settings?.bioSummary ||
-                  'İstanbul çağdaş tiyatro sahnelerinde oyunculuk, reji ve dramaturji çalışmalarını sürdüren; sahne sanatları ile yapay zekâ ve yeni medya pratiklerini harmanlayan tiyatro sanatçısı, yönetmen ve podcast üreticisi.',
-                settings?.bioSummary_en ||
-                  'Theater artist, director, and podcast producer based in Istanbul, merging contemporary theater stages with AI and new media practices.'
-              )}
+              {settings?.bioSummary ||
+                  'İstanbul çağdaş tiyatro sahnelerinde oyunculuk, reji ve dramaturji çalışmalarını sürdüren; sahne sanatları ile yapay zekâ ve yeni medya pratiklerini harmanlayan tiyatro sanatçısı, yönetmen ve podcast üreticisi.'}
             </p>
             <div className="flex items-center gap-3 pt-2">
               {social?.spotify && (
@@ -80,37 +76,37 @@ export const Footer: React.FC = () => {
           {/* Col 2: Hızlı Menü */}
           <div>
             <h4 className="text-white text-sm font-semibold tracking-wider mb-4">
-              {t('HIZLI BAĞLANTILAR', 'QUICK LINKS')}
+              HIZLI BAĞLANTILAR
             </h4>
             <ul className="space-y-2.5">
               <li>
                 <Link to="/etkinlikler" className="hover:text-[#ff5a1f] transition-colors">
-                  {t('Etkinlik Takvimi & Biletler', 'Event Calendar & Tickets')}
+                  Etkinlik Takvimi & Biletler
                 </Link>
               </li>
               <li>
                 <Link to="/podcast" className="hover:text-[#ff5a1f] transition-colors">
-                  {t('Ben Bir İsmail Podcast', 'Ben Bir Ismail Podcast')}
+                  Ben Bir İsmail Podcast
                 </Link>
               </li>
               <li>
                 <Link to="/yapay-zeka" className="hover:text-[#ff5a1f] transition-colors">
-                  {t('Yapay Zekâ ve Sahne Sanatları', 'Artificial Intelligence & Performing Arts')}
+                  Yapay Zekâ ve Sahne Sanatları
                 </Link>
               </li>
               <li>
                 <Link to="/egitimler" className="hover:text-[#ff5a1f] transition-colors">
-                  {t('Oyunculuk & Atölye Programı', 'Acting & Workshop Program')}
+                  Oyunculuk & Atölye Programı
                 </Link>
               </li>
               <li>
                 <Link to="/hakkimda" className="hover:text-[#ff5a1f] transition-colors">
-                  {t('Sanatçı Özgeçmişi (Biyografi)', 'Artist Biography')}
+                  Sanatçı Özgeçmişi (Biyografi)
                 </Link>
               </li>
               <li>
                 <Link to="/iletisim" className="hover:text-[#ff5a1f] transition-colors">
-                  {t('İletişim & Proje Teklifleri', 'Contact & Inquiries')}
+                  İletişim & Proje Teklifleri
                 </Link>
               </li>
             </ul>
@@ -119,7 +115,7 @@ export const Footer: React.FC = () => {
           {/* Col 3: İletişim Bilgileri */}
           <div>
             <h4 className="text-white text-sm font-semibold tracking-wider mb-4">
-              {t('İLETİŞİM & AJANS', 'CONTACT & AGENCY')}
+              İLETİŞİM & AJANS
             </h4>
             <div className="space-y-3">
               {settings?.contactEmail && (
@@ -141,7 +137,7 @@ export const Footer: React.FC = () => {
               {settings?.address && (
                 <div className="flex items-start gap-2.5">
                   <MapPin className="w-4 h-4 text-[#ff5a1f] shrink-0 mt-0.5" />
-                  <span>{t(settings.address, settings.address_en)}</span>
+                  <span>{settings.address}</span>
                 </div>
               )}
             </div>
@@ -151,12 +147,8 @@ export const Footer: React.FC = () => {
         {/* Bottom bar */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
           <div>
-            {t(
-              settings?.copyrightText ||
-                `© ${new Date().getFullYear()} İsmail Semih Habiboğulları. Tüm Hakları Saklıdır.`,
-              settings?.copyrightText_en ||
-                `© ${new Date().getFullYear()} Ismail Semih Habibogullari. All Rights Reserved.`
-            )}
+            {settings?.copyrightText ||
+                `© ${new Date().getFullYear()} İsmail Semih Habiboğulları. Tüm Hakları Saklıdır.`}
           </div>
           <div className="flex items-center gap-6">
             <Link to="/sitemap.xml" target="_blank" className="hover:text-gray-300">

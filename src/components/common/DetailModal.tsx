@@ -71,7 +71,7 @@ function resolveVideo(videoUrl?: string, embedUrl?: string) {
 }
 
 export const DetailModal: React.FC<DetailModalProps> = ({ item, onClose }) => {
-  const { language, theme } = useSite();
+  const { theme } = useSite();
   const closeRef = useRef<HTMLButtonElement>(null);
   const mediaRef = useRef<HTMLDivElement>(null);
   const isDark = theme !== 'light';
@@ -128,7 +128,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, onClose }) => {
             {item.category && <p className="text-xs font-semibold text-[#ff5a1f] uppercase tracking-widest mb-1">{item.category}</p>}
             <h2 id="detail-dialog-title" className="text-xl sm:text-2xl font-bold leading-snug">{item.title}</h2>
           </div>
-          <button ref={closeRef} type="button" onClick={onClose} aria-label={language === 'en' ? 'Close details' : 'Detayları kapat'}
+          <button ref={closeRef} type="button" onClick={onClose} aria-label="Detayları kapat"
             className="shrink-0 p-2 rounded-xl hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-[#ff5a1f]">
             <X size={22} />
           </button>
@@ -143,10 +143,10 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, onClose }) => {
                   allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
                   referrerPolicy="strict-origin-when-cross-origin" className="w-full h-full border-0" />
               )}
-              <button type="button" onClick={fullscreen} title={language === 'en' ? 'Fullscreen' : 'Tam ekran'}
+              <button type="button" onClick={fullscreen} title="Tam ekran"
                 className="absolute right-3 top-3 z-10 flex items-center gap-1.5 px-3 py-2 bg-black/75 hover:bg-[#ff5a1f] text-white rounded-lg text-xs font-semibold">
                 <Maximize2 size={15} />
-                {language === 'en' ? 'Fullscreen' : 'Tam Ekran'}
+                Tam Ekran
               </button>
             </div>
           ) : item.imageUrl ? (
@@ -173,7 +173,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ item, onClose }) => {
                 return <a key={action.id} href={href} target={external ? '_blank' : undefined}
                   rel={external ? 'noopener noreferrer' : undefined}
                   className="inline-flex items-center justify-center gap-2 bg-[#ff5a1f] hover:bg-[#ff733b] text-white px-5 py-3 rounded-xl font-semibold text-sm transition-colors">
-                  {language === 'en' && action.label_en ? action.label_en : action.label}
+                  {action.label}
                   {external && <ExternalLink size={15} />}
                 </a>;
               })}

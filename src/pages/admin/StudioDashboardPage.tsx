@@ -30,71 +30,71 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 const groups: Group[] = [
   { key: 'heroSlides', name: 'Ana Slider', icon: SlidersHorizontal, image: 'imageUrl', defaults: {
-    title: 'Yeni slider', title_en: '', subtitle: '', subtitle_en: '', category: 'Tiyatro', imageUrl: '', mediaType: 'image', videoUrl:'',
-    badge: '', buttonText: 'Detayları Gör', buttonText_en: 'View Details', buttonLink: '',
+    title: 'Yeni slider',  subtitle: '',  category: 'Tiyatro', imageUrl: '', mediaType: 'image', videoUrl:'',
+    badge: '', buttonText: 'Detayları Gör',  buttonLink: '',
     active: true, order: 1,
-  }, fields: [field('title','Başlık'), field('title_en','Başlık · İngilizce'), field('subtitle','Kısa açıklama','textarea'),
-    field('subtitle_en','Kısa açıklama · İngilizce','textarea'), field('category','Kategori'),
+  }, fields: [field('title','Başlık'),  field('subtitle','Kısa açıklama','textarea'),
+     field('category','Kategori'),
     field('badge','Etiket'), field('mediaType','Slider medya türü','select',['image','video']),
     field('imageUrl','Afiş / Kapak','image'), field('videoUrl','Video Yükle veya Link Göm','video'),
     field('buttonText','Slider üstü buton yazısı'), field('buttonLink','Eski bağlantı (detay penceresi açılır)','url'),
     field('active','Görünür','toggle')] },
   { key: 'events', name: 'Etkinlik Takvimi', icon: CalendarDays, image: 'imageUrl', defaults: {
-    title:'Yeni Etkinlik',title_en:'',category:'Tiyatro',date:today(),time:'20:00',venue:'',address:'',
-    description:'',description_en:'',imageUrl:'',ticketUrl:'',ticketStatus:'soon',price:'',published:true,
-  },fields:[field('title','Etkinlik / oyun adı'),field('title_en','Ad · İngilizce'),field('category','Kategori','select',['Tiyatro','Performans','Atölye','Panel','Diğer']),
+    title:'Yeni Etkinlik',category:'Tiyatro',date:today(),time:'20:00',venue:'',address:'',
+    description:'',imageUrl:'',ticketUrl:'',ticketStatus:'soon',price:'',published:true,
+  },fields:[field('title','Etkinlik / oyun adı'),field('category','Kategori','select',['Tiyatro','Performans','Atölye','Panel','Diğer']),
     field('date','Tarih','date'),field('time','Başlangıç saati','time'),field('venue','Mekân'),field('address','Adres'),
-    field('description','Açıklama','textarea'),field('description_en','Açıklama · İngilizce','textarea'),
+    field('description','Açıklama','textarea'),
     field('imageUrl','Etkinlik görseli','image'),field('ticketStatus','Bilet durumu','select',['available','sold_out','free','soon']),
     field('ticketUrl','Bilet bağlantısı (popup butonundan bağımsız)','url'),field('price','Fiyat'),
     field('published','Yayında','toggle')] },
   { key:'highlights',name:'Öne Çıkanlar',icon:Sparkles,image:'imageUrl',defaults:{
-    title:'Yeni Öne Çıkan',title_en:'',category:'Performans',description:'',description_en:'',mediaType:'image',
+    title:'Yeni Öne Çıkan',category:'Performans',description:'',mediaType:'image',
     imageUrl:'',videoUrl:'',embedUrl:'',linkUrl:'',linkText:'Detayları Gör',published:true,order:1,
-  },fields:[field('title','Başlık'),field('title_en','Başlık · İngilizce'),field('category','Kategori'),
-    field('description','Açıklama','textarea'),field('description_en','Açıklama · İngilizce','textarea'),
+  },fields:[field('title','Başlık'),field('category','Kategori'),
+    field('description','Açıklama','textarea'),
     field('mediaType','Medya türü','select',['image','video']),field('imageUrl','Afiş / Kapak','image'),
     field('videoUrl','Video bağlantısı','video'),field('linkUrl','Ek bağlantı','url'),field('published','Yayında','toggle')] },
   {key:'instagramPosts',name:'Instagram Paylaşımları',icon:Instagram,image:'mediaUrl',defaults:{
-    caption:'Yeni Instagram Paylaşımı',caption_en:'',mediaUrl:'',mediaType:'IMAGE',permalink:'',
+    caption:'Yeni Instagram Paylaşımı',mediaUrl:'',mediaType:'IMAGE',permalink:'',
     timestamp:new Date().toISOString(),likesCount:0,commentsCount:0,order:1,published:true,
-  },fields:[field('caption','Paylaşım açıklaması','textarea'),field('caption_en','Açıklama · İngilizce','textarea'),
+  },fields:[field('caption','Paylaşım açıklaması','textarea'),
     field('mediaType','Medya tipi','select',['IMAGE','VIDEO','CAROUSEL_ALBUM']),
     field('mediaUrl','Görsel / Önizleme','image'),field('permalink','Instagram paylaşım linki','url'),
     field('likesCount','Beğeni sayısı','number'),field('published','Yayında','toggle')]},
   {key:'podcasts',name:'Podcast',icon:Mic2,image:'imageUrl',defaults:{
-    episodeNumber:1,title:'Yeni Podcast Bölümü',title_en:'',description:'',description_en:'',
+    episodeNumber:1,title:'Yeni Podcast Bölümü',description:'',
     guest:'',duration:'',publishDate:today(),imageUrl:'',audioUrl:'',spotifyUrl:'',youtubeUrl:'',
     appleUrl:'',featured:false,published:true,
-  },fields:[field('episodeNumber','Bölüm numarası','number'),field('title','Bölüm başlığı'),field('title_en','Başlık · İngilizce'),
+  },fields:[field('episodeNumber','Bölüm numarası','number'),field('title','Bölüm başlığı'),
     field('guest','Konuk'),field('duration','Süre'),field('publishDate','Yayın tarihi','date'),
-    field('description','Bölüm açıklaması','textarea'),field('description_en','Açıklama · İngilizce','textarea'),
+    field('description','Bölüm açıklaması','textarea'),
     field('imageUrl','Kapak görseli','image'),field('audioUrl','Ses dosyası / adresi','url'),
     field('spotifyUrl','Spotify bağlantısı','url'),field('youtubeUrl','YouTube bağlantısı','video'),
     field('featured','Öne çıkar','toggle'),field('published','Yayında','toggle')]},
   {key:'articles',name:'Yapay Zekâ / Yazılar',icon:BrainCircuit,image:'imageUrl',defaults:{
-    title:'Yeni Yazı',title_en:'',slug:'yeni-yazi',category:'Yapay Zekâ',tags:[],readTime:'5 dk',
-    publishDate:today(),excerpt:'',excerpt_en:'',content:'',content_en:'',imageUrl:'',featured:false,published:true,
-  },fields:[field('title','Başlık'),field('title_en','Başlık · İngilizce'),field('slug','Adres kısa adı (slug)'),
+    title:'Yeni Yazı',slug:'yeni-yazi',category:'Yapay Zekâ',tags:[],readTime:'5 dk',
+    publishDate:today(),excerpt:'',content:'',imageUrl:'',featured:false,published:true,
+  },fields:[field('title','Başlık'),field('slug','Adres kısa adı (slug)'),
     field('category','Kategori'),field('tags','Etiketler · virgülle ayır','tags'),field('readTime','Okuma süresi'),
-    field('publishDate','Yayın tarihi','date'),field('excerpt','Özet','textarea'),field('excerpt_en','Özet · İngilizce','textarea'),
-    field('content','Yazı içeriği','textarea'),field('content_en','Yazı · İngilizce','textarea'),
+    field('publishDate','Yayın tarihi','date'),field('excerpt','Özet','textarea'),
+    field('content','Yazı içeriği','textarea'),
     field('imageUrl','Kapak','image'),field('featured','Öne çıkar','toggle'),field('published','Yayında','toggle')]},
   {key:'trainings',name:'Eğitimler',icon:GraduationCap,image:'imageUrl',defaults:{
-    title:'Yeni Eğitim',title_en:'',instructor:'İsmail Semih Habiboğulları',startDate:today(),
-    duration:'',quota:'',price:'',location:'',description:'',description_en:'',imageUrl:'',applyUrl:'',status:'soon',published:true,
-  },fields:[field('title','Eğitim adı'),field('title_en','Ad · İngilizce'),field('instructor','Eğitmen'),
+    title:'Yeni Eğitim',instructor:'İsmail Semih Habiboğulları',startDate:today(),
+    duration:'',quota:'',price:'',location:'',description:'',imageUrl:'',applyUrl:'',status:'soon',published:true,
+  },fields:[field('title','Eğitim adı'),field('instructor','Eğitmen'),
     field('startDate','Başlangıç tarihi','date'),field('duration','Süre'),field('quota','Kontenjan'),
     field('price','Ücret'),field('location','Konum'),field('description','Açıklama','textarea'),
-    field('description_en','Açıklama · İngilizce','textarea'),field('imageUrl','Kapak','image'),
+    field('imageUrl','Kapak','image'),
     field('applyUrl','Başvuru adresi','url'),field('status','Durum','select',['active','soon','completed']),
     field('published','Yayında','toggle')]},
   {key:'press',name:'Basın / Haberler',icon:Newspaper,image:'imageUrl',defaults:{
-    title:'Yeni Haber',title_en:'',outlet:'',publishDate:today(),quote:'',quote_en:'',
+    title:'Yeni Haber',outlet:'',publishDate:today(),quote:'',
     imageUrl:'',articleUrl:'',order:1,published:true,
-  },fields:[field('title','Haber başlığı'),field('title_en','Başlık · İngilizce'),field('outlet','Yayın organı'),
+  },fields:[field('title','Haber başlığı'),field('outlet','Yayın organı'),
     field('publishDate','Yayın tarihi','date'),field('quote','Alıntı / Özet','textarea'),
-    field('quote_en','Özet · İngilizce','textarea'),field('imageUrl','Haber görseli','image'),
+    field('imageUrl','Haber görseli','image'),
     field('articleUrl','Haber bağlantısı','url'),field('published','Yayında','toggle')]},
 ];
 
@@ -453,7 +453,7 @@ export const StudioDashboardPage: React.FC = () => {
               </div>
             </div>
             <div className="grid sm:grid-cols-2 gap-3">
-              {simpleSettings([['title','Blok başlığı'],['title_en','Başlık · İngilizce'],['subtitle','Blok alt başlığı'],['subtitle_en','Alt başlık · İngilizce']],sec as unknown as Generic,patch=>mutate(s=>({...s,sections:s.sections.map(x=>x.id===sec.id?{...x,...patch}:x)})))}
+              {simpleSettings([['title','Blok başlığı'],['subtitle','Blok alt başlığı'],],sec as unknown as Generic,patch=>mutate(s=>({...s,sections:s.sections.map(x=>x.id===sec.id?{...x,...patch}:x)})))}
               {([['maxWidth','En fazla genişlik (px, 600–1920)'],['minHeight','Minimum yükseklik (px, 0–1200)'],['paddingY','Üst ve alt boşluk (px, 0–160)']] as const).map(([key,label])=><label key={key} className="space-y-1 block text-xs text-gray-300">
                 {label}
                 <input type="number" min={key==='maxWidth'?600:0} max={key==='maxWidth'?1920:key==='minHeight'?1200:160} step="10"
@@ -470,9 +470,9 @@ export const StudioDashboardPage: React.FC = () => {
 
       {panel==='menu'&&<section className="space-y-4">
         <div className="flex justify-between items-center gap-4"><h2 className="text-xl font-bold">Menü Yönetimi</h2>
-          <button type="button" className="px-4 py-3 rounded-xl bg-[#ff5a1f] font-bold text-sm flex gap-2 items-center" onClick={()=>mutate(s=>({...s,menu:[...s.menu,{id:'menu_'+Date.now(),label:'Yeni Menü',label_en:'New Menu',path:'/',order:s.menu.length+1,visible:true}]}))}><Plus size={17}/>Yeni Menü Ekle</button></div>
+          <button type="button" className="px-4 py-3 rounded-xl bg-[#ff5a1f] font-bold text-sm flex gap-2 items-center" onClick={()=>mutate(s=>({...s,menu:[...s.menu,{id:'menu_'+Date.now(),label:'Yeni Menü',path:'/',order:s.menu.length+1,visible:true}]}))}><Plus size={17}/>Yeni Menü Ekle</button></div>
         {[...local.menu].sort((a,b)=>a.order-b.order).map(m=><div className={cardClass+' p-4 grid sm:grid-cols-4 gap-3 items-end'} key={m.id}>
-          {simpleSettings([['label','Menü Adı'],['label_en','English'],['path','Hedef URL']],m as unknown as Generic,patch=>mutate(s=>({...s,menu:s.menu.map(x=>x.id===m.id?{...x,...patch}:x)})))}
+          {simpleSettings([['label','Menü Adı'],['path','Hedef URL']],m as unknown as Generic,patch=>mutate(s=>({...s,menu:s.menu.map(x=>x.id===m.id?{...x,...patch}:x)})))}
           <div className="flex items-center justify-between gap-2">
             <label className="text-xs flex items-center gap-2 text-gray-300"><input type="checkbox" checked={m.visible} className="accent-[#ff5a1f]" onChange={e=>mutate(s=>({...s,menu:s.menu.map(x=>x.id===m.id?{...x,visible:e.target.checked}:x)}))}/>Görünsün</label>
             <button type="button" onClick={()=>mutate(s=>({...s,menu:s.menu.filter(x=>x.id!==m.id)}))} className="p-2 text-red-400 hover:bg-red-950/30 rounded-lg" title="Menüyü sil"><Trash2 size={17}/></button>
@@ -488,8 +488,8 @@ export const StudioDashboardPage: React.FC = () => {
         </div>
         <div className={cardClass+' p-4 sm:p-6 space-y-5'}>
           {settingsTab==='brand'&&<>
-            {simpleSettings([['siteTitle','Site Adı'],['siteTitle_en','Site Adı · İngilizce'],
-              ['siteSubtitle','Site alt başlığı'],['siteSubtitle_en','Alt başlık · İngilizce'],
+            {simpleSettings([['siteTitle','Site Adı'],
+              ['siteSubtitle','Site alt başlığı'],
               ['copyrightText','Telif metni']],local.settings as unknown as Generic,settingsPatch)}
             <div className="grid lg:grid-cols-2 gap-4">
               {(['logoUrl','lightLogoUrl','darkLogoUrl','mobileLogoUrl','faviconUrl'] as const).map(key=><StudioMediaField key={key}
@@ -553,8 +553,8 @@ export const StudioDashboardPage: React.FC = () => {
             </div>
           </>}
           {settingsTab==='seo'&&<>
-            {simpleSettings([['title','Google sayfa başlığı'],['title_en','Başlık · İngilizce'],['description','SEO açıklaması'],
-              ['description_en','Açıklama · İngilizce'],['keywords','Anahtar kelimeler'],['canonicalUrl','Kanonik site adresi']],
+            {simpleSettings([['title','Google sayfa başlığı'],['description','SEO açıklaması'],
+              ['keywords','Anahtar kelimeler'],['canonicalUrl','Kanonik site adresi']],
               local.seo as unknown as Generic,seoPatch)}
             <StudioMediaField accept="image" label="Sosyal paylaşım görseli / OG Image" value={local.seo.ogImage} onChange={v=>seoPatch({ogImage:v})}/>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" className="accent-[#ff5a1f]" checked={local.seo.robotsIndex}
@@ -562,14 +562,13 @@ export const StudioDashboardPage: React.FC = () => {
           </>}
           {settingsTab==='social'&&<>
             {simpleSettings([['contactEmail','İletişim e-postası'],['contactPhone','Telefon'],
-              ['address','Adres'],['address_en','Adres · İngilizce']],local.settings as unknown as Generic,settingsPatch)}
+              ['address','Adres'],],local.settings as unknown as Generic,settingsPatch)}
             <h3 className="font-bold">Sosyal Medya Hesapları</h3>
             {simpleSettings([['instagram','Instagram'],['youtube','YouTube'],['spotify','Spotify'],
               ['twitter','X / Twitter'],['linkedin','LinkedIn'],['email','E-posta']],local.settings.socialLinks as unknown as Generic,
               patch=>settingsPatch({socialLinks:{...local.settings.socialLinks,...patch}}))}
             <h3 className="font-bold">Hakkımda Özeti</h3>
-            <TextControl multiline label="Kısa biyografi (TR)" value={local.settings.bioSummary} onChange={v=>settingsPatch({bioSummary:v})}/>
-            <TextControl multiline label="Short bio (EN)" value={local.settings.bioSummary_en} onChange={v=>settingsPatch({bioSummary_en:v})}/>
+            <TextControl multiline label="Kısa biyografi" value={local.settings.bioSummary} onChange={v=>settingsPatch({bioSummary:v})}/>
           </>}
         </div>
       </section>}

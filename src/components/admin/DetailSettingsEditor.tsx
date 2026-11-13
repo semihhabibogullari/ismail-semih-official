@@ -7,10 +7,10 @@ interface Props {
   ticketUrl?: string;
 }
 
-const presets: Array<{ kind: DetailAction['kind']; title: string; en: string; defaultUrl: string }> = [
-  { kind: 'ticket', title: 'Bilet Al', en: 'Buy Tickets', defaultUrl: '' },
-  { kind: 'contact', title: 'İletişim', en: 'Contact', defaultUrl: '/iletisim' },
-  { kind: 'custom', title: 'Özel Buton', en: 'Learn More', defaultUrl: '' },
+const presets: Array<{ kind: DetailAction['kind']; title: string; defaultUrl: string }> = [
+  { kind: 'ticket', title: 'Bilet Al', defaultUrl: '' },
+  { kind: 'contact', title: 'İletişim', defaultUrl: '/iletisim' },
+  { kind: 'custom', title: 'Özel Buton', defaultUrl: '' },
 ];
 
 export const DetailSettingsEditor: React.FC<Props> = ({ value, onChange, ticketUrl }) => {
@@ -20,7 +20,7 @@ export const DetailSettingsEditor: React.FC<Props> = ({ value, onChange, ticketU
     const existing = current.find(a => a.kind === kind);
     const next: DetailAction = {
       id: kind, kind,
-      label: preset.title, label_en: preset.en,
+      label: preset.title,
       url: (kind === 'ticket' ? ticketUrl : preset.defaultUrl) || '',
       enabled: false, ...existing, ...patch,
     };
@@ -35,16 +35,11 @@ export const DetailSettingsEditor: React.FC<Props> = ({ value, onChange, ticketU
           Kart, afiş veya Detayları Gör tıklanınca açılır. Alt butonlar yalnızca burada etkinleştirilirse görünür.
         </p>
       </div>
-      <div className="grid sm:grid-cols-2 gap-3">
+      <div className="grid gap-3">
         <label className="block text-xs text-gray-300">
-          Uzun açıklama (Türkçe)
+          Uzun açıklama
           <textarea rows={4} value={value.detailDescription || ''} onChange={e => onChange({ detailDescription: e.target.value })}
             placeholder="Boş bırakılırsa normal açıklama kullanılır." className="block mt-1 w-full rounded-lg bg-[#151520] border border-white/15 p-2 text-white resize-y" />
-        </label>
-        <label className="block text-xs text-gray-300">
-          Long description (English)
-          <textarea rows={4} value={value.detailDescription_en || ''} onChange={e => onChange({ detailDescription_en: e.target.value })}
-            placeholder="Optional English detail" className="block mt-1 w-full rounded-lg bg-[#151520] border border-white/15 p-2 text-white resize-y" />
         </label>
       </div>
       <label className="block text-xs text-gray-300">
@@ -66,12 +61,9 @@ export const DetailSettingsEditor: React.FC<Props> = ({ value, onChange, ticketU
               </label>
               {action?.enabled && (
                 <div className="grid sm:grid-cols-2 gap-2">
-                  <input aria-label={`${preset.title} Türkçe buton yazısı`} value={action.label}
+                  <input aria-label={`${preset.title} buton yazısı`} value={action.label}
                     onChange={e => updateAction(preset.kind, { label: e.target.value })}
-                    placeholder="Türkçe buton adı" className="rounded-lg bg-[#151520] border border-white/15 px-3 py-2 text-white text-xs" />
-                  <input aria-label={`${preset.title} İngilizce buton yazısı`} value={action.label_en || ''}
-                    onChange={e => updateAction(preset.kind, { label_en: e.target.value })}
-                    placeholder="English button label" className="rounded-lg bg-[#151520] border border-white/15 px-3 py-2 text-white text-xs" />
+                    placeholder="Buton adı" className="sm:col-span-2 rounded-lg bg-[#151520] border border-white/15 px-3 py-2 text-white text-xs" />
                   <input aria-label={`${preset.title} hedef bağlantısı`} value={action.url}
                     onChange={e => updateAction(preset.kind, { url: e.target.value })}
                     placeholder={preset.kind === 'ticket' ? 'https://bilet.../...' : '/iletisim veya https://...'}

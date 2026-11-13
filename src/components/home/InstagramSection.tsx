@@ -19,7 +19,7 @@ import { useSite } from '../../context/SiteContext';
 import { InstagramPost } from '../../types';
 
 export const InstagramSection: React.FC = () => {
-  const { data, t } = useSite();
+  const { data } = useSite();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [selectedPost, setSelectedPost] = useState<InstagramPost | null>(null);
 
@@ -55,15 +55,15 @@ export const InstagramSection: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 text-xs font-semibold tracking-wider text-[#ff5a1f] mb-1">
               <Instagram className="w-4 h-4 text-[#e1306c]" />
-              <span>{t("INSTAGRAM'DA İSMAİL SEMİH", 'ISMAIL SEMIH ON INSTAGRAM')}</span>
+              <span>{"INSTAGRAM'DA İSMAİL SEMİH"}</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold text-[#f1f1f4] tracking-tight">
-              {t('Sahne Arkası & Güncel Paylaşımlar', 'Backstage & Recent Posts')}
+              Sahne Arkası & Güncel Paylaşımlar
             </h2>
             <p className="text-gray-400 text-sm mt-1 flex items-center gap-2">
               <span>@{username}</span>
               <span>·</span>
-              <span>{t('Prova süreçleri, turne anları ve özel içerikler', 'Rehearsal logs, tour moments, and behind-the-scenes')}</span>
+              <span>Prova süreçleri, turne anları ve özel içerikler</span>
             </p>
           </div>
 
@@ -75,7 +75,7 @@ export const InstagramSection: React.FC = () => {
               className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-[#e1306c]/20 via-[#fd1d1d]/20 to-[#f56040]/20 hover:from-[#e1306c]/30 hover:to-[#f56040]/30 border border-[#e1306c]/40 text-[#f1f1f4] text-xs font-semibold transition-all hover:scale-[1.02] shadow-sm"
             >
               <Instagram className="w-3.5 h-3.5 text-[#e1306c]" />
-              <span>{t("Instagram'da Takip Et", 'Follow on Instagram')}</span>
+              <span>{"Instagram'da Takip Et"}</span>
               <ExternalLink className="w-3 h-3 text-gray-400" />
             </a>
 
@@ -141,7 +141,7 @@ export const InstagramSection: React.FC = () => {
                 {/* Default bottom caption preview strip */}
                 <div className="absolute inset-x-0 bottom-0 p-3 bg-gradient-to-t from-black/90 via-black/50 to-transparent group-hover:opacity-0 transition-opacity duration-200">
                   <p className="text-[11px] text-gray-200 line-clamp-1">
-                    {t(post.caption, post.caption_en)}
+                    {post.caption}
                   </p>
                   <span className="text-[10px] text-gray-400 font-mono mt-0.5 block">
                     {post.timestamp}
@@ -159,7 +159,7 @@ export const InstagramSection: React.FC = () => {
                   </div>
 
                   <p className="text-xs text-[#f1f1f4] line-clamp-4 leading-relaxed">
-                    {t(post.caption, post.caption_en)}
+                    {post.caption}
                   </p>
 
                   <div className="flex items-center justify-between pt-3 border-t border-white/10 text-xs">
@@ -181,7 +181,7 @@ export const InstagramSection: React.FC = () => {
                     </div>
 
                     <span className="text-[11px] font-semibold text-[#ff5a1f] flex items-center gap-0.5">
-                      {t('Görüntüle', 'View')}
+                      Görüntüle
                       <ChevronRight className="w-3 h-3" />
                     </span>
                   </div>
@@ -237,7 +237,7 @@ export const InstagramSection: React.FC = () => {
                 </div>
 
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1 text-xs text-gray-200 leading-relaxed">
-                  <p>{t(selectedPost.caption, selectedPost.caption_en)}</p>
+                  <p>{selectedPost.caption}</p>
                 </div>
               </div>
 
@@ -247,13 +247,13 @@ export const InstagramSection: React.FC = () => {
                     <Heart className="w-4 h-4 fill-red-400" />
                     <span className="font-semibold">
                       {selectedPost.likesCount ? selectedPost.likesCount.toLocaleString() : '1,240'}{' '}
-                      {t('beğeni', 'likes')}
+                      beğeni
                     </span>
                   </div>
                   <div className="flex items-center gap-1.5 text-gray-300">
                     <MessageCircle className="w-4 h-4" />
                     <span>
-                      {selectedPost.commentsCount || 48} {t('yorum', 'comments')}
+                      {selectedPost.commentsCount || 48} {'yorum'}
                     </span>
                   </div>
                 </div>
@@ -265,7 +265,7 @@ export const InstagramSection: React.FC = () => {
                   className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-[#e1306c] to-[#f56040] hover:from-[#c8235a] hover:to-[#e04f32] text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md shadow-[#e1306c]/20"
                 >
                   <Instagram className="w-4 h-4" />
-                  <span>{t("Instagram'da Aç ve Yorum Yap", 'Open on Instagram & Comment')}</span>
+                  <span>{"Instagram'da Aç ve Yorum Yap"}</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>

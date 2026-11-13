@@ -18,23 +18,15 @@ import { useSite } from '../../context/SiteContext';
 import { EventItem, TicketStatus } from '../../types';
 import { DetailModal, DetailModalItem } from '../common/DetailModal';
 
-const MONTH_NAMES_TR = [
+const monthNames = [
   'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
 ];
 
-const MONTH_NAMES_EN = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-
-const DAY_NAMES_TR = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
-const DAY_NAMES_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const dayNames = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
 export const EventCalendar: React.FC = () => {
-  const { data, t, language } = useSite();
-  const monthNames = language === 'en' ? MONTH_NAMES_EN : MONTH_NAMES_TR;
-  const dayNames = language === 'en' ? DAY_NAMES_EN : DAY_NAMES_TR;
+  const { data } = useSite();
   const allEvents = useMemo(() => {
     return (data.events || [])
       .filter((ev) => ev.published)
@@ -47,15 +39,15 @@ export const EventCalendar: React.FC = () => {
 
   const showEventDetails = (event: EventItem) => {
     setSelectedDetail({
-      title: t(event.title, event.title_en),
-      category: t(event.category, event.category_en),
-      description: t(event.detailDescription || event.description, event.detailDescription_en || event.description_en),
+      title: event.title,
+      category: event.category,
+      description: event.detailDescription || event.description,
       imageUrl: event.imageUrl,
       videoUrl: event.detailVideoUrl,
       meta: [
         { label: 'Tarih', value: event.date, icon: 'date' },
         { label: 'Saat', value: event.time, icon: 'time' },
-        { label: 'Mekân', value: t(event.venue, event.venue_en), icon: 'place' },
+        { label: 'Mekân', value: event.venue, icon: 'place' },
         ...(event.price ? [{ label: 'Fiyat', value: event.price }] : []),
       ] as DetailModalItem['meta'],
       actions: event.detailActions || [],
@@ -325,7 +317,7 @@ export const EventCalendar: React.FC = () => {
                 : `${monthNames[currentMonth]} ${currentYear}`}
             </span>
             <span className="text-xs text-[#ff5a1f] font-mono font-normal">
-              ({calendarView === 'week' ? t('Haftalık Görünüm', 'Weekly View') : t('Aylık Görünüm', 'Monthly View')})
+              ({calendarView === 'week' ? 'Haftalık Görünüm' : 'Aylık Görünüm'})
             </span>
           </div>
 
@@ -527,7 +519,7 @@ export const EventCalendar: React.FC = () => {
                     />
                     <div className="absolute top-2 left-2">
                       <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-black/80 text-[#ff5a1f] backdrop-blur-sm">
-                        {t(event.category, event.category_en)}
+                        {event.category}
                       </span>
                     </div>
                   </div>
@@ -543,11 +535,11 @@ export const EventCalendar: React.FC = () => {
                       </div>
 
                       <h4 className="text-base font-bold text-white group-hover:text-[#ff5a1f] transition-colors line-clamp-1">
-                        {t(event.title, event.title_en)}
+                        {event.title}
                       </h4>
 
                       <p className="text-xs text-gray-400 line-clamp-2 mt-1">
-                        {t(event.description, event.description_en)}
+                        {event.description}
                       </p>
 
                       <div className="mt-3 space-y-1 text-xs text-gray-300">
@@ -563,7 +555,7 @@ export const EventCalendar: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-1.5 text-gray-400 truncate">
                           <MapPin className="w-3.5 h-3.5 text-[#ff5a1f] shrink-0" />
-                          <span className="truncate">{t(event.venue, event.venue_en)}</span>
+                          <span className="truncate">{event.venue}</span>
                         </div>
                       </div>
                     </div>
@@ -572,7 +564,7 @@ export const EventCalendar: React.FC = () => {
                     <div className="mt-4 pt-3 border-t border-white/5">
                       <button type="button" onClick={() => showEventDetails(event)}
                         className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#ff5a1f] text-white text-xs font-semibold hover:bg-[#ff733b] cursor-pointer">
-                        {t('Detayları Gör', 'View Details')}
+                        Detayları Gör
                         <ChevronRight className="w-4 h-4" />
                       </button>
                     </div>

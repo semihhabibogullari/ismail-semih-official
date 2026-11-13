@@ -9,7 +9,7 @@ import { ChevronLeft, ChevronRight, ArrowRight } from 'lucide-react';
 import { useSite } from '../../context/SiteContext';
 
 export const HeroSlider: React.FC = () => {
-  const { data, t } = useSite();
+  const { data } = useSite();
   const slides = (data.heroSlides || []).filter((s) => s.active).sort((a, b) => a.order - b.order);
   const sliderSettings = data.settings?.sliderSettings || {
     transitionType: 'kenburns-crossfade',
@@ -66,9 +66,9 @@ export const HeroSlider: React.FC = () => {
 
   const openSlideDetails = (slide: typeof slides[number]) => {
     setSelectedDetail({
-      title: t(slide.title, slide.title_en),
-      category: t(slide.category, slide.category_en),
-      description: t(slide.detailDescription || slide.subtitle, slide.detailDescription_en || slide.subtitle_en),
+      title: slide.title,
+      category: slide.category,
+      description: slide.detailDescription || slide.subtitle,
       imageUrl: slide.imageUrl,
       videoUrl: slide.detailVideoUrl || slide.videoUrl,
       actions: slide.detailActions || [],
@@ -117,9 +117,9 @@ export const HeroSlider: React.FC = () => {
                   {slide.mediaType === 'video' && slide.videoUrl &&
                     /\.(mp4|webm)(?:[?#]|$)/i.test(slide.videoUrl) ? (
                     <video src={slide.videoUrl} poster={slide.imageUrl} muted loop autoPlay playsInline
-                      aria-label={t(slide.title, slide.title_en)} className="w-full h-full object-cover" />
+                      aria-label={slide.title} className="w-full h-full object-cover" />
                   ) : (
-                    <img src={slide.imageUrl} alt={t(slide.title, slide.title_en)}
+                    <img src={slide.imageUrl} alt={slide.title}
                       className={imageAnimationClass} loading={index === 0 ? 'eager' : 'lazy'} />
                   )}
 
@@ -129,7 +129,7 @@ export const HeroSlider: React.FC = () => {
                   {/* Entire slide background opens its detail, not just the CTA. */}
                   <button type="button" onClick={() => openSlideDetails(slide)}
                     tabIndex={isActive ? 0 : -1}
-                    aria-label={`${t(slide.title, slide.title_en)} — ${t('Detayları Gör', 'View Details')}`}
+                    aria-label={`${slide.title} — ${'Detayları Gör'}`}
                     className="absolute inset-0 z-[1] cursor-pointer focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#ff5a1f]" />
 
                   {/* Content Overlay */}
@@ -138,20 +138,20 @@ export const HeroSlider: React.FC = () => {
                     <div className="flex items-center gap-2 mb-2 text-xs font-semibold tracking-wider text-[#ff5a1f]">
                       {slide.badge && (
                         <span className="bg-[#ff5a1f] text-black px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-widest">
-                          {t(slide.badge, slide.badge_en)}
+                          {slide.badge}
                         </span>
                       )}
-                      <span>{t(slide.category, slide.category_en)}</span>
+                      <span>{slide.category}</span>
                     </div>
 
                     {/* Title */}
                     <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-[#f1f1f4] tracking-tight mb-2 sm:mb-3 leading-tight line-clamp-2">
-                      {t(slide.title, slide.title_en)}
+                      {slide.title}
                     </h2>
 
                     {/* Subtitle / Description */}
                     <p className="text-gray-300 text-xs sm:text-sm lg:text-base line-clamp-2 sm:line-clamp-3 mb-4 sm:mb-6 leading-relaxed max-w-xl">
-                      {t(slide.subtitle, slide.subtitle_en)}
+                      {slide.subtitle}
                     </p>
 
                     {/* CTA Button */}
@@ -160,7 +160,7 @@ export const HeroSlider: React.FC = () => {
                         <button type="button" onClick={() => openSlideDetails(slide)}
                           className="pointer-events-auto inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] text-white text-xs sm:text-sm font-semibold transition-all transform hover:translate-x-0.5 shadow-lg shadow-[#ff5a1f]/20 focus:outline-none focus:ring-2 focus:ring-[#ff5a1f] cursor-pointer"
                         >
-                          <span>{t('Detayları Gör', 'View Details')}</span>
+                          <span>Detayları Gör</span>
                           <ArrowRight className="w-4 h-4" />
                         </button>
                       </div>
