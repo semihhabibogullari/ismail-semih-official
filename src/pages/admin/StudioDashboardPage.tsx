@@ -146,6 +146,7 @@ export const StudioDashboardPage: React.FC = () => {
   const [settingsTab,setSettingsTab] = useState<'brand'|'colors'|'fonts'|'sizing'|'seo'|'social'>('brand');
   const [advancedJson,setAdvancedJson] = useState('');
   const [importProblem,setImportProblem] = useState('');
+  const [publishNote,setPublishNote] = useState('');
   const [unread,setUnread] = useState<number|null>(null);
 
   useEffect(()=>{if(!isLoading && !isAuthenticated) nav('/admin/login',{replace:true});},[isLoading,isAuthenticated,nav]);
@@ -234,8 +235,8 @@ export const StudioDashboardPage: React.FC = () => {
     setBusy(true);setFeedback(null);
     const before=await saveDraft(local);
     if(!before.success){setBusy(false);setFeedback({ok:false,text:before.message||'Önce taslak kaydedilemedi.'});return;}
-    const done=await publishToLive('Yeni Site Stüdyosu üzerinden yayınlandı');
-    if(done.success) {setDirty(false);setPreviewRevision(v=>v+1);}
+    const done=await publishToLive(publishNote.trim()||'Yeni Site Stüdyosu üzerinden yayınlandı');
+    if(done.success) {setPublishNote('');setDirty(false);setPreviewRevision(v=>v+1);}
     setBusy(false);
     setFeedback({ok:done.success,text:done.success?'Site yayınlandı. Değişiklikler ziyaretçilere açık.':done.message||'Yayınlama başarısız.'});
     await refreshData();
@@ -318,6 +319,12 @@ export const StudioDashboardPage: React.FC = () => {
       </div>
     </header>
     <div className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6">
+      <label className="flex flex-wrap items-center gap-3 rounded-xl bg-white/5 border border-white/10 px-4 py-2.5">
+        <span className="text-xs font-semibold text-gray-300">Sürüm notu (isteğe bağlı)</span>
+        <input type="text" maxLength={200} value={publishNote} onChange={e=>setPublishNote(e.target.value)}
+          placeholder="Yayınlarken sürüm yedeğine eklenecek kısa not"
+          className="flex-1 min-w-[200px] bg-transparent text-sm outline-none placeholder:text-gray-500" />
+      </label>
       {feedback&&<p role="status" className={`flex gap-2 items-center p-3 rounded-xl text-sm border ${feedback.ok?'bg-emerald-950/20 border-emerald-600/30 text-emerald-300':'bg-red-950/20 border-red-600/30 text-red-300'}`}>
         {feedback.ok?<CheckCircle2 size={18}/>:<AlertCircle size={18}/>} {feedback.text}</p>}
       {isDirty&&<p className="rounded-xl bg-amber-500/10 border border-amber-500/20 px-4 py-2 text-amber-300 text-xs">
