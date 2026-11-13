@@ -7,12 +7,15 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft, Calendar, Clock, Users, MapPin, CheckCircle, ArrowRight } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
+import { NotFoundPage } from './NotFoundPage';
 
 export const TrainingDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { data } = useSite();
 
   const training = (data.trainings || []).find((t) => t.id === id);
+
+  if (training && training.published === false) return <NotFoundPage />;
 
   if (!training) {
     return (

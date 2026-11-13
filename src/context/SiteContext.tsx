@@ -16,7 +16,6 @@ interface SiteContextType {
   setIsDraftMode: (val: boolean) => void;
   hasDraftChanges: boolean;
   isAuthenticated: boolean;
-  token: string | null;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
   refreshData: () => Promise<void>;
@@ -37,7 +36,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
   );
   const [hasDraftChanges, setHasDraftChanges] = useState<boolean>(false);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [token, setToken] = useState<string | null>(null);
 
   // Persistent Theme preference (Dark by default)
   const [theme, setThemeState] = useState<ThemeMode>(() => {
@@ -183,9 +181,7 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     setIsLoading(true);
     try {
       const endpoint = isDraftMode && isAuthenticated ? '/api/site/draft' : '/api/site';
-      const res = await fetch(endpoint, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await fetch(endpoint);
       if (res.ok) {
         const json = await res.json();
         if (json.data) {
@@ -200,7 +196,7 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-  }, [isDraftMode, isAuthenticated, token]);
+  }, [isDraftMode, isAuthenticated]);
 
   useEffect(() => {
     checkAuth();
@@ -222,7 +218,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(merged),
       });
@@ -245,7 +240,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ note }),
       });
@@ -268,7 +262,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ backupId }),
       });
@@ -294,7 +287,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
       const json = await res.json();
       if (res.ok && json.success) {
         setIsAuthenticated(true);
-        if (json.token) setToken(json.token);
         return { success: true };
       }
       return { success: false, error: json.error || 'Giriş başarısız.' };
@@ -308,7 +300,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
       await fetch('/api/auth/logout', { method: 'POST' });
     } finally {
       setIsAuthenticated(false);
-      setToken(null);
       setIsDraftMode(false);
       refreshData();
     }
@@ -323,7 +314,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
         setIsDraftMode,
         hasDraftChanges,
         isAuthenticated,
-        token,
         theme,
         setTheme,
         refreshData,

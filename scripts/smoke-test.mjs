@@ -11,7 +11,7 @@ const base = `http://127.0.0.1:${port}`;
 const testUsername = 'ismailsemih';
 const testPassword = 'local-smoke-password-only-2026!';
 const server = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
-  env: { ...process.env, PORT: String(port), NODE_ENV: 'production', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
+  env: { ...process.env, PORT: String(port), NODE_ENV: 'production', TRUST_PROXY: '1', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
     STUDIO_DATA_DIR: path.join(isolatedRoot, 'data'), STUDIO_UPLOADS_DIR: path.join(isolatedRoot, 'uploads') },
   stdio: ['ignore', 'pipe', 'pipe'],
 });
@@ -227,12 +227,119 @@ try {
   const badUpload = await request('/api/media/upload', { method:'POST', body:uploadData });
   assert.equal(badUpload.status, 401, 'Public users cannot upload media');
 
+  // --- Stage 4: hidden content, validation, rate limits, limits, headers, CSV ---
+  const draftNow = (await (await request('/api/site/draft', { headers: { cookie } })).json()).data;
+  const secretDraft = JSON.parse(JSON.stringify(draftNow));
+  secretDraft.articles[0].published = false;
+  secretDraft.events[0].published = false;
+  secretDraft.heroSlides[0].active = false;
+  const hiddenIds = [secretDraft.articles[0].id, secretDraft.events[0].id, secretDraft.heroSlides[0].id];
+  assert.equal((await request('/api/site/draft', { method: 'POST', headers: { cookie, ...json }, body: JSON.stringify(secretDraft) })).status, 200);
+  assert.equal((await request('/api/site/publish', { method: 'POST', headers: { cookie, ...json }, body: '{}' })).status, 200);
+  const publicAfter = await (await request('/api/site')).json();
+  for (const key of ['events', 'highlights', 'instagramPosts', 'podcasts', 'articles', 'trainings', 'press']) {
+    assert.ok((publicAfter.data[key] || []).every((item) => item.published !== false), 'No unpublished ' + key + ' in public data');
+  }
+  assert.ok(publicAfter.data.heroSlides.every((slide) => slide.active !== false), 'No inactive hero slide in public data');
+  const publicText = JSON.stringify(publicAfter);
+  for (const id of hiddenIds) assert.equal(publicText.includes('"id":"' + id + '"'), false, 'Hidden item ' + id + ' leaked');
+  const adminDraft = await (await request('/api/site/draft', { headers: { cookie } })).json();
+  assert.equal(adminDraft.data.articles[0].published, false, 'Admin draft keeps hidden items');
+  assert.equal(adminDraft.data.heroSlides[0].active, false);
+
+  const ipHeaders = (ip) => ({ ...json, 'x-forwarded-for': ip });
+  const contactBody = { name: 'Test', email: 'valid@example.com', subject: 'Konu', message: 'Merhaba' };
+  const post = (url, ip, body) => request(url, { method: 'POST', headers: ipHeaders(ip), body: typeof body === 'string' ? body : JSON.stringify(body) });
+  const badContacts = [
+    { ...contactBody, name: 42 }, { ...contactBody, email: 'not-an-email' }, { ...contactBody, name: 'x'.repeat(101) },
+    { ...contactBody, email: 'a'.repeat(250) + '@b.co' }, { ...contactBody, subject: 's'.repeat(151) },
+    { ...contactBody, message: 'm'.repeat(5001) }, { ...contactBody, message: '   ' }, { ...contactBody, subject: ['x'] },
+  ];
+  for (let i = 0; i < badContacts.length; i++) {
+    const r = await post('/api/contact', '10.1.0.' + i, badContacts[i]);
+    assert.equal(r.status, 400, 'Invalid contact payload #' + i + ' must be rejected');
+    assert.match((await r.json()).error, /[a-zıöüçğş]/i);
+  }
+  const atLimit = await post('/api/contact', '10.1.1.1', { ...contactBody, name: 'n'.repeat(100), subject: 's'.repeat(150), message: 'm'.repeat(5000) });
+  assert.equal(atLimit.status, 200, 'Maximum-length valid contact is accepted');
+  for (const bad of [{ email: 'nope', consent: true }, { email: 123, consent: true }, { email: 'a@b', consent: true }, { email: 'a'.repeat(250) + '@b.co', consent: true }]) {
+    assert.equal((await post('/api/newsletter/subscribe', '10.2.0.1', bad)).status, 400, 'Invalid subscriber rejected');
+  }
+  assert.equal((await post('/api/newsletter/subscribe', '10.2.0.2', { email: 'dup-test@example.com', consent: true })).status, 200);
+  const dup = await post('/api/newsletter/subscribe', '10.2.0.3', { email: 'DUP-TEST@example.com', consent: true });
+  assert.equal(dup.status, 200);
+  assert.match((await dup.json()).message, /zaten/, 'Duplicate subscriber keeps the existing behaviour');
+
+  // Rate limits are counted per forwarded client IP (TRUST_PROXY=1).
+  for (let i = 0; i < 5; i++) assert.equal((await post('/api/contact', '10.3.0.1', contactBody)).status, 200);
+  const limited = await post('/api/contact', '10.3.0.1', contactBody);
+  assert.equal(limited.status, 429, 'Sixth contact message from one IP is rate limited');
+  assert.match((await limited.json()).error, /Çok fazla/);
+  assert.ok(limited.headers.get('retry-after'));
+  assert.equal((await post('/api/contact', '10.3.0.2', contactBody)).status, 200, 'A different IP has its own bucket');
+  for (let i = 0; i < 10; i++) assert.equal((await post('/api/newsletter/subscribe', '10.3.1.1', { email: 'rl' + i + '@example.com', consent: true })).status, 200);
+  assert.equal((await post('/api/newsletter/subscribe', '10.3.1.1', { email: 'rl-over@example.com', consent: true })).status, 429);
+  assert.equal((await post('/api/newsletter/subscribe', '10.3.1.2', { email: 'rl-other@example.com', consent: true })).status, 200);
+
+  // Body size limits.
+  const tooBig = await post('/api/contact', '10.4.0.1', JSON.stringify({ ...contactBody, message: 'x'.repeat(1024 * 1024) }));
+  assert.equal(tooBig.status, 413, '1 MB body is rejected on public endpoints');
+  assert.match((await tooBig.json()).error, /büyük/);
+  const bigDraft = { ...draftNow, about: { ...draftNow.about, biography: 'b'.repeat(1024 * 1024) } };
+  assert.equal((await request('/api/site/draft', { method: 'POST', headers: { cookie, ...json }, body: JSON.stringify(bigDraft) })).status, 200, 'Admin draft may exceed 50 KB');
+  assert.equal((await request('/api/site/draft', { method: 'POST', headers: json, body: JSON.stringify(bigDraft) })).status, 401, 'Anonymous big draft is refused');
+  assert.equal((await request('/api/site/draft', { method: 'POST', headers: { cookie, ...json }, body: JSON.stringify({ ...draftNow, about: { ...draftNow.about, biography: 'b'.repeat(6 * 1024 * 1024) } }) })).status, 413, 'Admin bodies above 5 MB are rejected');
+  assert.equal((await request('/api/contact', { method: 'POST', headers: json, body: '{bad json' })).status, 400);
+
+  // CSRF: cross-site browser requests are refused.
+  const crossSite = await request('/api/contact', { method: 'POST', headers: { ...ipHeaders('10.5.0.1'), 'sec-fetch-site': 'cross-site' }, body: JSON.stringify(contactBody) });
+  assert.equal(crossSite.status, 403);
+  assert.equal((await request('/api/contact', { method: 'POST', headers: { ...ipHeaders('10.5.0.2'), 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(contactBody) })).status, 200);
+
+  // Security headers (the smoke server runs with NODE_ENV=production).
+  const headerProbe = await request('/');
+  assert.equal(headerProbe.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(headerProbe.headers.get('x-frame-options'), 'SAMEORIGIN');
+  assert.equal(headerProbe.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+  assert.ok(headerProbe.headers.get('permissions-policy'));
+  assert.match(headerProbe.headers.get('strict-transport-security') || '', /max-age=\d+/);
+  const csp = headerProbe.headers.get('content-security-policy') || '';
+  assert.match(csp, /script-src 'self'(;|$)/);
+  for (const origin of ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.youtube-nocookie.com', 'www.youtube.com', 'player.vimeo.com', 'open.spotify.com', 'www.instagram.com']) {
+    assert.ok(csp.includes(origin), 'CSP allows ' + origin);
+  }
+  assert.equal((await request('/api/site')).headers.get('x-content-type-options'), 'nosniff');
+
+  // CSV export neutralises formulas and escapes quotes (records seeded straight into the isolated data dir).
+  const evilEmails = ['=cmd@example.com', '+plus@example.com', '-minus@example.com', '@at@example.com', '\tTab@example.com', 'q"uote@example.com'];
+  fs.writeFileSync(path.join(isolatedRoot, 'data', 'subscribers.json'),
+    JSON.stringify(evilEmails.map((email, i) => ({ id: 'sub_csv_' + i, email, date: '2026-01-01T00:00:00.000Z', confirmed: true }))));
+  const csvText = await (await request('/api/newsletter/export', { headers: { cookie } })).text();
+  for (const prefixed of ["'=cmd@example.com", "'+plus@example.com", "'-minus@example.com", "'@at@example.com", "'\tTab@example.com"]) {
+    assert.ok(csvText.includes('"' + prefixed + '"'), 'CSV cell is neutralised: ' + JSON.stringify(prefixed));
+  }
+  assert.ok(csvText.includes('"q""uote@example.com"'), 'Double quotes are doubled');
+
+  // SSRF blocklist for the URL preview.
+  for (const blocked of ['http://172.16.0.1/a.mp4', 'http://172.31.255.1/a.mp4', 'http://0.0.0.0/a.mp4', 'http://[::1]/a.mp4', 'http://[fd00::1]/a.mp4',
+    'http://[fe80::1]/a.mp4', 'http://[::ffff:127.0.0.1]/a.mp4', 'http://printer.local/a.mp4', 'http://db.internal/a.mp4', 'http://foo.localhost/a.mp4', 'http://10.0.0.1/a.mp4']) {
+    const r = await request('/api/video/preview', { method: 'POST', headers: { cookie, ...json }, body: JSON.stringify({ url: blocked }) });
+    assert.equal(r.status, 400, blocked + ' must be blocked');
+  }
+  const publicVideo = await request('/api/video/preview', { method: 'POST', headers: { cookie, ...json }, body: JSON.stringify({ url: 'https://example.com/a.mp4' }) });
+  assert.equal(publicVideo.status, 200, 'Public hosts are still allowed');
+
+  // Instagram integration is manual-only.
+  assert.equal((await request('/api/instagram/sync', { method: 'POST', headers: { cookie, ...json }, body: '{}' })).status, 404);
+  const igConfig = await (await request('/api/instagram/config', { headers: { cookie } })).json();
+  for (const gone of ['accessToken', 'connected', 'autoSync']) assert.equal(gone in igConfig.settings, false, gone + ' is gone');
+
   const logout = await request('/api/auth/logout', { method: 'POST', headers: { cookie } });
   assert.equal(logout.status, 200);
   const oldSession = await request('/api/site/draft', { headers: { cookie } });
   assert.equal(oldSession.status, 401);
 
-  process.stdout.write('PASS: public data, login/logout, cookie auth, secret isolation, URL preview permission, removed AI endpoints, _en cleanup.\n');
+  process.stdout.write('PASS: public data, login/logout, cookie auth, secret isolation, URL preview permission, removed AI endpoints, _en cleanup, hidden-content filter, form validation, rate limits, body limits, security headers, CSV escaping, SSRF list.\n');
 } catch (error) {
   process.stderr.write('SMOKE TEST FAILED: ' + error.stack + '\n' + logs.slice(-1800) + '\n');
   process.exitCode = 1;

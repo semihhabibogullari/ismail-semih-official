@@ -67,10 +67,8 @@ export const initialSiteData: SiteData = {
       pauseOnHover: true,
     },
     instagramSettings: {
-      connected: false,
       username: 'ismailsemih',
       accountType: 'CREATOR',
-      autoSync: true,
       showLikes: true,
       postCountDesktop: 5,
       postCountTablet: 3,

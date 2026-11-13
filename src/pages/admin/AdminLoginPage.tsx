@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { Lock, ArrowRight, AlertCircle, Loader2, KeyRound, ExternalLink } from 'lucide-react';
+import { Lock, ArrowRight, AlertCircle, Loader2, KeyRound } from 'lucide-react';
 import { useSite } from '../../context/SiteContext';
 import { Logo } from '../../components/common/Logo';
 
@@ -112,12 +112,7 @@ export const AdminLoginPage: React.FC = () => {
               </summary>
               <div className="mt-3 space-y-2 text-xs leading-relaxed text-gray-400">
                 <p>Kullanıcı adı: <strong className="text-gray-200">ismailsemih</strong> (sunucuda değiştirilmediyse).</p>
-                <p>Şifre otomatik olarak siteye yazılmaz. GitHub Codespaces'te <strong>ADMIN_PASSWORD</strong> adındaki gizli ayardan yönetilir.</p>
-                <p>GitHub ayarlarında yeni ve benzersiz bir şifre belirle, <strong>ismail-semih-official</strong> deposuna erişim ver ve Codespace'i durdurup yeniden başlat.</p>
-                <a href="https://github.com/settings/codespaces" target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[#ff8c42] hover:underline">
-                  Codespaces şifre ayarını aç <ExternalLink className="w-3.5 h-3.5" />
-                </a>
+                <p>Şifre otomatik olarak siteye yazılmaz; sunucudaki <strong>ADMIN_PASSWORD</strong> ortam değişkeninden yönetilir. Değiştirmek için sunucu yöneticisine başvurun.</p>
                 <p>Çok sayıda hatalı giriş yaptıysan son denemenden itibaren en az 5 dakika bekle. Bu sayfa şifreni göremez veya sıfırlayamaz.</p>
               </div>
             </details>

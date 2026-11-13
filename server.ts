@@ -23,6 +23,24 @@ const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
+// Behind a reverse proxy (Plesk/nginx) set TRUST_PROXY=1 so req.ip is the real client address.
+const TRUST_PROXY = Number(process.env.TRUST_PROXY);
+if (Number.isInteger(TRUST_PROXY) && TRUST_PROXY > 0) app.set('trust proxy', TRUST_PROXY);
+
+// Optional media origin (e.g. an R2 / CDN domain) that images, audio and video may load from.
+function configuredMediaOrigin(): string | null {
+  const raw = process.env.MEDIA_BASE_URL?.trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.origin : null;
+  } catch {
+    console.warn('MEDIA_BASE_URL geçerli bir adres değil, yok sayıldı.');
+    return null;
+  }
+}
+const MEDIA_ORIGIN = configuredMediaOrigin();
+
 // Directories
 const DATA_DIR = process.env.STUDIO_DATA_DIR ? path.resolve(process.env.STUDIO_DATA_DIR) : path.resolve(__dirname, 'data');
 const BACKUPS_DIR = path.resolve(DATA_DIR, 'backups');
@@ -32,7 +50,6 @@ const DRAFT_DATA_FILE = path.resolve(DATA_DIR, 'draft-data.json');
 const MESSAGES_FILE = path.resolve(DATA_DIR, 'messages.json');
 const SUBSCRIBERS_FILE = path.resolve(DATA_DIR, 'subscribers.json');
 const AUTH_FILE = path.resolve(DATA_DIR, 'auth.json');
-const INSTAGRAM_SECRET_FILE = path.resolve(DATA_DIR, 'instagram-secret.json');
 
 // Ensure directories exist
 [DATA_DIR, BACKUPS_DIR, UPLOADS_DIR].forEach((dir) => {
@@ -84,8 +101,11 @@ function migrateSiteData(rawExisting: any, defaults: SiteData): SiteData {
   if (!existing || typeof existing !== 'object') return defaults;
 
   // Never copy credential fields into public site data, drafts, or backups.
-  const { accessToken: _ignoredToken, ...safeInstagramSettings } =
-    existing.settings?.instagramSettings || {};
+  // Legacy Instagram API fields (token, connected, autoSync) are dropped from stored data.
+  const {
+    accessToken: _legacyToken, tokenExpiresAt: _legacyExpiry, connected: _legacyConnected, autoSync: _legacyAutoSync,
+    ...safeInstagramSettings
+  } = existing.settings?.instagramSettings || {};
 
   return {
     ...defaults,
@@ -178,23 +198,7 @@ if (bootstrapPassword) {
     console.info('Yönetici şifresi güvenli ayarlardan yapılandırıldı.');
   }
 } else if (!authConfig) {
-  // Codespaces is a private development workspace. Generate a unique, strong
-  // temporary credential only there, never in production or public source code.
-  if (!IS_PROD && process.env.CODESPACES === 'true') {
-    const temporaryPassword = crypto.randomBytes(24).toString('base64url');
-    const salt = crypto.randomBytes(32).toString('hex');
-    authConfig = { version: 2, salt, passwordHash: hashPassword(temporaryPassword, salt) };
-    safeWriteJson(AUTH_FILE, authConfig);
-    console.info('\n=======================================================');
-    console.info('İSMAİL SEMİH STUDIO — İLK YÖNETİCİ KURULUMU');
-    console.info('Kullanıcı adı:', ADMIN_USERNAME);
-    console.info('Geçici şifre:', temporaryPassword);
-    console.info('Şifreniz yalnızca bu Codespaces terminal günlüğüne yazıldı.');
-    console.info('Kalıcı şifre için GitHub Codespaces Secrets ayarlarını kullanın');
-    console.info('=======================================================\n');
-  } else {
-    console.warn('Yönetici girişi kapalı: ADMIN_PASSWORD gizli ayarını kullanın.');
-  }
+  console.warn('Yönetici girişi kapalı: ADMIN_PASSWORD gizli ayarını kullanın.');
 }
 
 // Sessions are opaque, HttpOnly-cookie-only and expire server-side.
@@ -224,9 +228,49 @@ let draftData: SiteData = migrateSiteData(rawDraft, publishedData);
 safeWriteJson(DRAFT_DATA_FILE, draftData);
 
 // Express Middlewares
-app.use(express.json({ limit: '25mb' }));
-app.use(express.urlencoded({ extended: true, limit: '25mb' }));
+app.disable('x-powered-by');
+
+// Security headers. The CSP is only sent in production: the Vite dev server needs inline
+// scripts and a websocket for hot reload, which a strict policy would block.
+const SECURITY_HEADERS: Record<string, string> = {
+  'X-Content-Type-Options': 'nosniff',
+  'X-Frame-Options': 'SAMEORIGIN', // the admin preview is a same-origin iframe
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+};
+if (IS_PROD) SECURITY_HEADERS['Strict-Transport-Security'] = 'max-age=31536000';
+const mediaSource = MEDIA_ORIGIN ? ` ${MEDIA_ORIGIN}` : '';
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com" + mediaSource,
+  "img-src 'self' data: https:" + mediaSource,
+  "media-src 'self' https:" + mediaSource,
+  "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://open.spotify.com https://www.instagram.com",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join('; ');
+app.use((_req: Request, res: Response, next: NextFunction) => {
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(name, value);
+  if (IS_PROD) res.setHeader('Content-Security-Policy', CONTENT_SECURITY_POLICY);
+  next();
+});
+
+// Request bodies: 50 KB everywhere, 5 MB only for the authenticated admin draft/import uploads.
+const smallJson = express.json({ limit: '50kb' });
+const adminJson = express.json({ limit: '5mb' });
 app.use(cookieParser());
+app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+  const bigAdminUpload = req.method === 'POST' && ['/site/draft', '/site/import'].includes(req.path);
+  if (!bigAdminUpload) return smallJson(req, res, next);
+  // Never buffer a large body for an anonymous visitor.
+  if (!sessionToken(req)) return res.status(401).json({ error: 'Yetkisiz erişim. Lütfen giriş yapınız.' });
+  return adminJson(req, res, next);
+});
 app.use('/uploads', express.static(UPLOADS_DIR, {
   setHeaders: (res) => { res.setHeader('X-Content-Type-Options', 'nosniff'); },
 }));
@@ -234,6 +278,9 @@ app.use('/uploads', express.static(UPLOADS_DIR, {
 // Reject cross-origin state changes made with browser cookies (CSRF defense).
 app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  if (req.get('sec-fetch-site') === 'cross-site') {
+    return res.status(403).json({ error: 'Bu kaynaktan işlem yapılamaz.' });
+  }
   const origin = req.get('origin');
   if (origin) {
     try {
@@ -262,6 +309,34 @@ function checkLoginRateLimit(req: Request, res: Response, next: NextFunction) {
   }
   next();
 }
+
+// In-memory, per-IP limiter for public form endpoints (counters reset on restart).
+function createRateLimiter(max: number, windowMs: number) {
+  const hits = new Map<string, { count: number; resetAt: number }>();
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, entry] of hits) if (entry.resetAt <= now) hits.delete(key);
+  }, 10 * 60 * 1000).unref();
+  return (req: Request, res: Response, next: NextFunction) => {
+    const key = req.ip || req.socket.remoteAddress || 'unknown';
+    const now = Date.now();
+    let entry = hits.get(key);
+    if (!entry || entry.resetAt <= now) {
+      entry = { count: 0, resetAt: now + windowMs };
+      hits.set(key, entry);
+    }
+    entry.count += 1;
+    if (entry.count > max) {
+      res.setHeader('Retry-After', String(Math.ceil((entry.resetAt - now) / 1000)));
+      return res.status(429).json({ error: 'Çok fazla istek gönderdiniz. Lütfen daha sonra tekrar deneyiniz.' });
+    }
+    next();
+  };
+}
+const contactRateLimit = createRateLimiter(5, 60 * 60 * 1000);
+const newsletterRateLimit = createRateLimiter(10, 60 * 60 * 1000);
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Auth Middleware
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -377,10 +452,21 @@ app.post('/api/auth/change-password', requireAuth, (req: Request, res: Response)
 });
 
 // 2. Site Data Endpoints (Public & Draft)
+// Public response only: hide unpublished / inactive items (the admin draft stays complete).
+const HIDEABLE_LISTS = ['events', 'highlights', 'instagramPosts', 'podcasts', 'articles', 'trainings', 'press'] as const;
+function publicSiteView(data: SiteData): SiteData {
+  const view: any = { ...data };
+  for (const key of HIDEABLE_LISTS) {
+    if (Array.isArray(view[key])) view[key] = view[key].filter((item: any) => item?.published !== false);
+  }
+  if (Array.isArray(view.heroSlides)) view.heroSlides = view.heroSlides.filter((slide: any) => slide?.active !== false);
+  return view as SiteData;
+}
+
 app.get('/api/site', (_req: Request, res: Response) => {
   const hasDraftChanges = JSON.stringify(publishedData) !== JSON.stringify(draftData);
   res.json({
-    data: publishedData,
+    data: publicSiteView(publishedData),
     version: publishedData.version,
     hasDraftChanges,
   });
@@ -517,6 +603,24 @@ app.post('/api/site/import', requireAuth, (req: Request, res: Response) => {
 });
 
 // 4. Universal Media & URL Preview System
+function isBlockedHostname(rawHost: string): boolean {
+  const host = rawHost.toLowerCase().replace(/^\[|\]$/g, '').replace(/\.$/, '');
+  if (!host) return true;
+  if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) return true;
+  if (host.includes(':')) { // IPv6 literal
+    return host === '::' || host === '::1' || host.startsWith('::ffff:') || // loopback, unspecified, IPv4-mapped
+      /^f[cd][0-9a-f]{2}:/.test(host) || // fc00::/7 unique local
+      /^fe[89ab][0-9a-f]:/.test(host); // fe80::/10 link local
+  }
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    return a === 0 || a === 10 || a === 127 || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127);
+  }
+  return false;
+}
+
 app.post('/api/video/preview', requireAuth, async (req: Request, res: Response) => {
   const { url } = req.body;
   if (!url || typeof url !== 'string') {
@@ -529,13 +633,7 @@ app.post('/api/video/preview', requireAuth, async (req: Request, res: Response) 
       return res.status(400).json({ error: 'Yalnızca HTTP ve HTTPS bağlantıları desteklenir.' });
     }
     const hostname = parsed.hostname.toLowerCase();
-    if (
-      hostname === 'localhost' ||
-      hostname.startsWith('127.') ||
-      hostname.startsWith('192.168.') ||
-      hostname.startsWith('10.') ||
-      hostname.startsWith('169.254.')
-    ) {
+    if (isBlockedHostname(hostname)) {
       return res.status(400).json({ error: 'Geçersiz hedef sunucu.' });
     }
 
@@ -679,31 +777,18 @@ app.get('/api/instagram/config', requireAuth, (_req: Request, res: Response) => 
 });
 
 app.post('/api/instagram/config', requireAuth, (req: Request, res: Response) => {
-  const { username, autoSync, showLikes, postCountDesktop, postCountTablet, postCountMobile, accessToken } = req.body || {};
-  if (typeof accessToken === 'string' && accessToken.trim()) {
-    safeWriteJson(INSTAGRAM_SECRET_FILE, { accessToken: accessToken.trim() });
-  }
-  const connected = Boolean(process.env.INSTAGRAM_ACCESS_TOKEN || fs.existsSync(INSTAGRAM_SECRET_FILE));
-  const { accessToken: _legacyToken, ...currentSettings } = draftData.settings.instagramSettings;
+  const { username, showLikes, postCountDesktop, postCountTablet, postCountMobile } = req.body || {};
+  const currentSettings = draftData.settings.instagramSettings;
   draftData.settings.instagramSettings = {
     ...currentSettings,
     username: username || currentSettings.username,
-    autoSync: autoSync ?? currentSettings.autoSync,
     showLikes: showLikes ?? currentSettings.showLikes,
     postCountDesktop: postCountDesktop || currentSettings.postCountDesktop,
     postCountTablet: postCountTablet || currentSettings.postCountTablet,
     postCountMobile: postCountMobile || currentSettings.postCountMobile,
-    connected,
   };
   safeWriteJson(DRAFT_DATA_FILE, draftData);
   res.json({ success: true, settings: draftData.settings.instagramSettings, message: 'Instagram ayarları güncellendi.' });
-});
-
-app.post('/api/instagram/sync', requireAuth, async (_req: Request, res: Response) => {
-  return res.status(501).json({
-    success: false,
-    error: 'Instagram otomatik senkronizasyonu henüz Meta API ile bağlanmadı. Gönderileri manuel yönetebilirsiniz.',
-  });
 });
 
 // 7. Media Library & Upload
@@ -761,11 +846,26 @@ app.delete('/api/media/delete', requireAuth, (req: Request, res: Response) => {
 });
 
 // 8. Contact & Newsletter
-app.post('/api/contact', (req: Request, res: Response) => {
-  const { name, email, subject, message } = req.body;
+app.post('/api/contact', contactRateLimit, (req: Request, res: Response) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const { name: rawName, email: rawEmail, subject: rawSubject, message: rawMessage } = body;
+  if ([rawName, rawEmail, rawMessage].some((v) => typeof v !== 'string') ||
+      (rawSubject !== undefined && rawSubject !== null && typeof rawSubject !== 'string')) {
+    return res.status(400).json({ error: 'Geçersiz form verisi gönderildi.' });
+  }
+  const name = (rawName as string).trim();
+  const email = (rawEmail as string).trim();
+  const subject = typeof rawSubject === 'string' ? rawSubject.trim() : '';
+  const message = (rawMessage as string).trim();
   if (!name || !email || !message) {
     return res.status(400).json({ error: 'Lütfen ad, e-posta ve mesaj alanlarını doldurunuz.' });
   }
+  if (name.length > 100) return res.status(400).json({ error: 'Ad en fazla 100 karakter olabilir.' });
+  if (email.length > 254 || !EMAIL_PATTERN.test(email)) {
+    return res.status(400).json({ error: 'Geçerli bir e-posta adresi giriniz.' });
+  }
+  if (subject.length > 150) return res.status(400).json({ error: 'Konu en fazla 150 karakter olabilir.' });
+  if (message.length > 5000) return res.status(400).json({ error: 'Mesaj en fazla 5000 karakter olabilir.' });
 
   const messages = safeReadJson<any[]>(MESSAGES_FILE, []);
   const newMsg = {
@@ -807,9 +907,11 @@ app.delete('/api/contact/delete', requireAuth, (req: Request, res: Response) => 
   res.json({ success: true });
 });
 
-app.post('/api/newsletter/subscribe', (req: Request, res: Response) => {
-  const { email, consent } = req.body;
-  if (!email || !email.includes('@')) {
+app.post('/api/newsletter/subscribe', newsletterRateLimit, (req: Request, res: Response) => {
+  const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const { email: rawEmail, consent } = body;
+  const email = typeof rawEmail === 'string' ? rawEmail.trim() : '';
+  if (!email || email.length > 254 || !EMAIL_PATTERN.test(email)) {
     return res.status(400).json({ error: 'Geçerli bir e-posta adresi giriniz.' });
   }
   if (!consent) {
@@ -824,7 +926,7 @@ app.post('/api/newsletter/subscribe', (req: Request, res: Response) => {
 
   const newSub = {
     id: `sub_${Date.now()}`,
-    email: email.trim().toLowerCase(),
+    email: email.toLowerCase(),
     date: new Date().toISOString(),
     confirmed: true,
   };
@@ -849,9 +951,15 @@ app.delete('/api/newsletter/delete', requireAuth, (req: Request, res: Response) 
 
 app.get('/api/newsletter/export', requireAuth, (_req: Request, res: Response) => {
   const subscribers = safeReadJson<any[]>(SUBSCRIBERS_FILE, []);
+  // Neutralise spreadsheet formula injection and escape quotes in every cell.
+  const csvCell = (value: unknown) => {
+    let text = String(value ?? '');
+    if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+    return `"${text.replace(/"/g, '""')}"`;
+  };
   const csvRows = ['ID,E-posta,Kayıt Tarihi'];
   subscribers.forEach((s) => {
-    csvRows.push(`"${s.id}","${s.email}","${s.date}"`);
+    csvRows.push([s.id, s.email, s.date].map(csvCell).join(','));
   });
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename=bulten_aboneleri.csv');
@@ -896,6 +1004,13 @@ ${urls.map((u) => `  <url><loc>${baseUrl}${u}</loc><lastmod>${new Date().toISOSt
 // Unknown API routes (e.g. the removed /api/ai/*) answer 404 JSON, never the SPA shell.
 app.use('/api', (_req: Request, res: Response) => {
   res.status(404).json({ error: 'Uç bulunamadı.' });
+});
+
+// Body-parser failures: oversized and malformed JSON answer with Turkish JSON errors.
+app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
+  if (err?.type === 'entity.too.large') return res.status(413).json({ error: 'İstek gövdesi çok büyük.' });
+  if (err?.type === 'entity.parse.failed') return res.status(400).json({ error: 'Geçersiz JSON verisi.' });
+  return next(err);
 });
 
 async function startServer() {

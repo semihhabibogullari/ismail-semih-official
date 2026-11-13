@@ -49,12 +49,8 @@ export interface SliderSettings {
 }
 
 export interface InstagramSettings {
-  connected: boolean;
   username: string;
   accountType?: 'PERSONAL' | 'BUSINESS' | 'CREATOR';
-  accessToken?: string;
-  tokenExpiresAt?: string;
-  autoSync: boolean;
   showLikes: boolean;
   postCountDesktop: number; // default 5
   postCountTablet: number; // default 3

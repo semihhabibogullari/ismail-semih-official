@@ -7,12 +7,15 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft, Calendar, Clock, Tag, Share2 } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
+import { NotFoundPage } from './NotFoundPage';
 
 export const ArticleDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { data } = useSite();
 
   const article = (data.articles || []).find((a) => a.id === id || a.slug === id);
+
+  if (article && article.published === false) return <NotFoundPage />;
 
   if (!article) {
     return (

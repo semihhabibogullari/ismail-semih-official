@@ -7,12 +7,15 @@ import React from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ChevronLeft, Calendar, Clock, Mic, Play, ExternalLink, Share2 } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
+import { NotFoundPage } from './NotFoundPage';
 
 export const PodcastDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { data } = useSite();
 
   const episode = (data.podcasts || []).find((p) => p.id === id);
+
+  if (episode && episode.published === false) return <NotFoundPage />;
 
   if (!episode) {
     return (
