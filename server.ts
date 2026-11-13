@@ -112,6 +112,12 @@ function migrateSiteData(existing: any, defaults: SiteData): SiteData {
     instagramPosts: Array.isArray(existing.instagramPosts)
       ? existing.instagramPosts
       : defaults.instagramPosts,
+    about: {
+      ...defaults.about,
+      ...(existing.about && typeof existing.about === 'object' ? existing.about : {}),
+      skills: Array.isArray(existing.about?.skills) ? existing.about.skills : defaults.about.skills,
+      plays: Array.isArray(existing.about?.plays) ? existing.about.plays : defaults.about.plays,
+    },
   };
 }
 
@@ -1021,6 +1027,14 @@ app.post('/api/newsletter/subscribe', (req: Request, res: Response) => {
 app.get('/api/newsletter/list', requireAuth, (_req: Request, res: Response) => {
   const subscribers = safeReadJson<any[]>(SUBSCRIBERS_FILE, []);
   res.json({ subscribers });
+});
+
+app.delete('/api/newsletter/delete', requireAuth, (req: Request, res: Response) => {
+  const { id } = req.body || {};
+  if (typeof id !== 'string' || !id) return res.status(400).json({ error: 'Abone kimliği gerekli.' });
+  const subscribers = safeReadJson<any[]>(SUBSCRIBERS_FILE, []);
+  safeWriteJson(SUBSCRIBERS_FILE, subscribers.filter((s) => s.id !== id));
+  res.json({ success: true });
 });
 
 app.get('/api/newsletter/export', requireAuth, (_req: Request, res: Response) => {

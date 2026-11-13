@@ -368,6 +368,38 @@ export interface AiConfig {
   };
 }
 
+export interface AboutSkill {
+  id: string;
+  title: string;
+  desc: string;
+}
+
+export interface AboutPlay {
+  id: string;
+  year: string;
+  title: string;
+  role: string;
+  venue: string;
+}
+
+/** Content of the "Hakkımda" page. Paragraphs in `biography` are separated by a blank line; **text** renders bold. */
+export interface AboutContent {
+  portraitUrl: string;
+  portraitName: string;
+  portraitRole: string;
+  badge: string;
+  heading: string;
+  biography: string;
+  skillsTitle: string;
+  skillsSubtitle: string;
+  skills: AboutSkill[];
+  playsTitle: string;
+  playsSubtitle: string;
+  plays: AboutPlay[];
+  ctaTitle: string;
+  ctaText: string;
+}
+
 export interface SiteVersion {
   id: string;
   timestamp: string;
@@ -391,4 +423,5 @@ export interface SiteData {
   trainings: TrainingItem[];
   press: PressItem[];
   seo: SeoSettings;
+  about: AboutContent;
 }

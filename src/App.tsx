@@ -22,7 +22,6 @@ import { NotFoundPage } from './pages/NotFoundPage';
 
 // Admin pages are loaded on demand so visitors do not download them.
 const AdminLoginPage = lazy(() => import('./pages/admin/AdminLoginPage').then(m => ({ default: m.AdminLoginPage })));
-const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
 const StudioDashboardPage = lazy(() => import('./pages/admin/StudioDashboardPage').then(m => ({ default: m.StudioDashboardPage })));
 
 // Scroll to top on route change
@@ -58,7 +57,6 @@ function AppLayout() {
           <Route path="/iletisim" element={<ContactPage />} />
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/admin" element={<StudioDashboardPage />} />
-          <Route path="/admin/advanced" element={<AdminDashboardPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
         </Suspense>

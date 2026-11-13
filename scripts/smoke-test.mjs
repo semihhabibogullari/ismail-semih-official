@@ -138,6 +138,61 @@ try {
   });
   assert.equal(restored.status, 200, 'Backups are restorable to draft');
 
+  // --- Panel modules: messages, subscribers, versions, export, about ---
+  const json = { 'content-type': 'application/json' };
+  const anonymous = [
+    ['GET', '/api/contact/list'], ['POST', '/api/contact/mark-read'], ['DELETE', '/api/contact/delete'],
+    ['GET', '/api/newsletter/list'], ['GET', '/api/newsletter/export'], ['DELETE', '/api/newsletter/delete'],
+    ['GET', '/api/site/backups'], ['POST', '/api/site/restore'], ['GET', '/api/site/export'],
+  ];
+  for (const [method, url] of anonymous) {
+    const r = await request(url, { method, headers: json, body: method === 'GET' ? undefined : '{}' });
+    assert.equal(r.status, 401, `${method} ${url} must require a session`);
+  }
+
+  assert.ok(publicJson.data.about?.skills?.length > 0, 'Public data carries the about page content');
+  assert.match(publicJson.data.about.biography, /Ben Bir İsmail/);
+  const aboutDraft = await request('/api/site/draft', {
+    method: 'POST', headers: { cookie, ...json },
+    body: JSON.stringify({ about: { ...publicJson.data.about, heading: 'Smoke Hakkımda Başlığı' } }),
+  });
+  assert.equal(aboutDraft.status, 200);
+  assert.equal((await aboutDraft.json()).data.about.heading, 'Smoke Hakkımda Başlığı');
+
+  const sentMessage = await request('/api/contact', {
+    method: 'POST', headers: json,
+    body: JSON.stringify({ name: 'Smoke Test', email: 'smoke@example.com', subject: 'Test', message: 'Merhaba' }),
+  });
+  assert.equal(sentMessage.status, 200);
+  const messages = (await (await request('/api/contact/list', { headers: { cookie } })).json()).messages;
+  const message = messages.find((m) => m.email === 'smoke@example.com');
+  assert.ok(message && message.read === false, 'Message appears unread in the panel');
+  await request('/api/contact/mark-read', { method: 'POST', headers: { cookie, ...json }, body: JSON.stringify({ id: message.id }) });
+  const afterRead = (await (await request('/api/contact/list', { headers: { cookie } })).json()).messages;
+  assert.equal(afterRead.find((m) => m.id === message.id).read, true, 'Message can be marked as read');
+  await request('/api/contact/delete', { method: 'DELETE', headers: { cookie, ...json }, body: JSON.stringify({ id: message.id }) });
+  const afterDelete = (await (await request('/api/contact/list', { headers: { cookie } })).json()).messages;
+  assert.equal(afterDelete.some((m) => m.id === message.id), false, 'Message can be deleted');
+
+  const subscribed = await request('/api/newsletter/subscribe', {
+    method: 'POST', headers: json, body: JSON.stringify({ email: 'smoke-sub@example.com', consent: true }),
+  });
+  assert.equal(subscribed.status, 200);
+  const subs = (await (await request('/api/newsletter/list', { headers: { cookie } })).json()).subscribers;
+  const sub = subs.find((s) => s.email === 'smoke-sub@example.com');
+  assert.ok(sub, 'Subscriber appears in the panel');
+  const csv = await request('/api/newsletter/export', { headers: { cookie } });
+  assert.equal(csv.status, 200);
+  assert.match(await csv.text(), /smoke-sub@example\.com/);
+  const removed = await request('/api/newsletter/delete', { method: 'DELETE', headers: { cookie, ...json }, body: JSON.stringify({ id: sub.id }) });
+  assert.equal(removed.status, 200);
+  const subsAfter = (await (await request('/api/newsletter/list', { headers: { cookie } })).json()).subscribers;
+  assert.equal(subsAfter.some((s) => s.id === sub.id), false, 'Subscriber can be deleted');
+
+  const exported = await request('/api/site/export', { headers: { cookie } });
+  assert.equal(exported.status, 200);
+  assert.ok((await exported.json()).data?.settings, 'Server export contains site data');
+
   const uploadData = new FormData();
   const tinyPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/6DkAAAAASUVORK5CYII=', 'base64');
   uploadData.append('file', new Blob([tinyPng], { type: 'image/png' }), 'smoke-test.png');

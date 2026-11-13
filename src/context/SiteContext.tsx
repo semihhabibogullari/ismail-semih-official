@@ -9,7 +9,6 @@ import { initialSiteData } from '../data/initialData';
 
 export type LanguageMode = 'tr' | 'en';
 export type ThemeMode = 'dark' | 'light';
-export type ExperienceMode = 'easy' | 'advanced' | 'expert';
 
 interface SiteContextType {
   data: SiteData;
@@ -23,8 +22,6 @@ interface SiteContextType {
   setLanguage: (lang: LanguageMode) => void;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
-  experienceMode: ExperienceMode;
-  setExperienceMode: (mode: ExperienceMode) => void;
   t: (trVal?: string, enVal?: string) => string;
   refreshData: () => Promise<void>;
   saveDraft: (updatedData: Partial<SiteData>) => Promise<{ success: boolean; message?: string }>;
@@ -197,24 +194,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
       } catch {}
     }
   }, [data.seo, data.settings?.siteTitle, data.settings?.siteTitle_en, data.settings?.faviconUrl, language]);
-
-  // Persistent Admin Experience Mode ('easy' | 'advanced' | 'expert')
-  const [experienceMode, setExperienceModeState] = useState<ExperienceMode>(() => {
-    try {
-      const saved = localStorage.getItem('ismail_admin_mode');
-      if (saved === 'advanced' || saved === 'expert') return saved;
-      return 'easy';
-    } catch {
-      return 'easy';
-    }
-  });
-
-  const setExperienceMode = (mode: ExperienceMode) => {
-    setExperienceModeState(mode);
-    try {
-      localStorage.setItem('ismail_admin_mode', mode);
-    } catch {}
-  };
 
   // Translation helper: returns English string if active lang is 'en' and translation exists
   const t = useCallback((trVal?: string, enVal?: string): string => {
@@ -482,8 +461,6 @@ export function SiteProvider({ children }: { children: ReactNode }) {
         setLanguage,
         theme,
         setTheme,
-        experienceMode,
-        setExperienceMode,
         t,
         refreshData,
         saveDraft,

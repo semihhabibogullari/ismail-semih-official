@@ -5,17 +5,20 @@ import {
   Layers, SlidersHorizontal, CalendarDays, Sparkles, Instagram, Mic2,
   BrainCircuit, GraduationCap, Newspaper, Mail, Settings2, Menu, Search,
   ChevronUp, ChevronDown, Image as ImageIcon, Type, Palette, LayoutGrid,
-  Globe2, CheckCircle2, AlertCircle, Loader2, Copy, RotateCcw, Monitor,
+  Globe2, CheckCircle2, AlertCircle, Loader2, Copy, RotateCcw, Download,
+  MessageSquare, Users, History, UserRound,
 } from 'lucide-react';
 import { useSite } from '../../context/SiteContext';
 import type { SiteData, DetailFields } from '../../types';
 import { StudioMediaField } from '../../components/admin/StudioMediaField';
 import { DetailSettingsEditor } from '../../components/admin/DetailSettingsEditor';
 import { SectionAppearanceEditor } from '../../components/admin/SectionAppearanceEditor';
+import { AboutEditor } from '../../components/admin/AboutEditor';
+import { MessagesPanel, SubscribersPanel, VersionsPanel } from '../../components/admin/InboxPanels';
 import type { SectionAppearance, SectionConfig } from '../../types';
 
 type CollectionKey = 'heroSlides' | 'events' | 'highlights' | 'instagramPosts' | 'podcasts' | 'articles' | 'trainings' | 'press';
-type Panel = CollectionKey | 'general' | 'sections' | 'menu' | 'newsletter' | 'support';
+type Panel = CollectionKey | 'general' | 'sections' | 'menu' | 'newsletter' | 'about' | 'messages' | 'subscribers' | 'versions' | 'support';
 type Generic = Record<string, unknown>;
 type FieldKind = 'text' | 'textarea' | 'date' | 'time' | 'number' | 'toggle' | 'image' | 'video' | 'select' | 'url' | 'tags';
 type Field = { key: string; label: string; kind?: FieldKind; choices?: string[] };
@@ -101,8 +104,12 @@ const PANEL_META = [
   {key:'sections' as Panel,name:'Blok Yerleşimi',detail:'Sıralama, görünürlük ve blok boyutları',icon:Layers},
   ...groups.map(g=>({key:g.key as Panel,name:g.name,detail:'İçerikleri ekle, düzenle ve önizle',icon:g.icon})),
   {key:'menu' as Panel,name:'Menü Yönetimi',detail:'Üst menü başlıkları ve bağlantıları',icon:Menu},
+  {key:'about' as Panel,name:'Hakkımda Sayfası',detail:'Biyografi, yetkinlikler, sahne çalışmaları',icon:UserRound},
   {key:'newsletter' as Panel,name:'Bülten / İletişim',detail:'Abonelik metinleri ve iletişim bilgileri',icon:Mail},
-  {key:'support' as Panel,name:'Gelişmiş İşlemler',detail:'Eski stüdyo, yedek, dışa aktarma',icon:Monitor},
+  {key:'messages' as Panel,name:'Mesajlar',detail:'İletişim formundan gelen mesajlar',icon:MessageSquare},
+  {key:'subscribers' as Panel,name:'Bülten Aboneleri',detail:'Abone listesi ve CSV dışa aktarma',icon:Users},
+  {key:'versions' as Panel,name:'Sürüm Geçmişi',detail:'Önceki yayınları taslağa geri yükle',icon:History},
+  {key:'support' as Panel,name:'Gelişmiş İşlemler',detail:'Yedek, dışa aktarma, JSON düzenleme',icon:Settings2},
 ];
 
 function titleOf(item: Generic): string {
@@ -124,7 +131,7 @@ function TextControl({ label, value, onChange, multiline, type='text' }: {
 
 export const StudioDashboardPage: React.FC = () => {
   const { data, isAuthenticated, isLoading, isDraftMode, setIsDraftMode, saveDraft,
-    publishToLive, refreshData, logout } = useSite();
+    publishToLive, restoreBackup, refreshData, logout } = useSite();
   const nav = useNavigate();
   const [local,setLocal] = useState<SiteData>(data);
   const [panel,setPanel] = useState<Panel|null>(null);
@@ -139,6 +146,7 @@ export const StudioDashboardPage: React.FC = () => {
   const [settingsTab,setSettingsTab] = useState<'brand'|'colors'|'fonts'|'sizing'|'seo'|'social'>('brand');
   const [advancedJson,setAdvancedJson] = useState('');
   const [importProblem,setImportProblem] = useState('');
+  const [unread,setUnread] = useState<number|null>(null);
 
   useEffect(()=>{if(!isLoading && !isAuthenticated) nav('/admin/login',{replace:true});},[isLoading,isAuthenticated,nav]);
   useEffect(()=>{if(!isDirty){setLocal(data);}},[data,isDirty]);
@@ -151,6 +159,22 @@ export const StudioDashboardPage: React.FC = () => {
       .catch(()=>{});
     return()=>{alive=false};
   },[isAuthenticated,isDirty,setIsDraftMode]);
+
+  useEffect(()=>{
+    if(!isAuthenticated)return;
+    let alive=true;
+    fetch('/api/contact/list',{credentials:'same-origin'}).then(r=>r.ok?r.json():null)
+      .then(j=>{if(alive&&Array.isArray(j?.messages))setUnread(j.messages.filter((m:{read?:boolean})=>!m.read).length);})
+      .catch(()=>{});
+    return()=>{alive=false};
+  },[isAuthenticated]);
+  const restoreVersion=async(id:string)=>{
+    const wasDirty=isDirty;
+    setDirty(false);
+    const r=await restoreBackup(id);
+    if(!r.success)setDirty(wasDirty);
+    return r;
+  };
 
   const mutate = (fn:(site:SiteData)=>SiteData) => {setLocal(prev=>fn(prev));setDirty(true);setFeedback(null)};
   const group = groups.find(g=>g.key===panel);
@@ -321,6 +345,7 @@ export const StudioDashboardPage: React.FC = () => {
                 <ArrowRight size={18} className="text-gray-600 group-hover:text-[#ff5a1f]"/></div>
               <h3 className="mt-5 font-bold text-lg">{p.name}</h3><p className="text-xs text-gray-400 mt-1">{p.detail}</p>
               {count!==undefined&&<p className="mt-3 text-[11px] text-[#ff8c42]">{count} içerik</p>}
+              {p.key==='messages'&&unread!==null&&<p className="mt-3 text-[11px] text-[#ff8c42]">{unread} okunmamış</p>}
             </button>})}
         </div>
       </>:null}
@@ -332,6 +357,21 @@ export const StudioDashboardPage: React.FC = () => {
             onChange={next=>updateAppearance(sectionForGroup(group.key)!.id,next)}
             onApplyAll={applyAppearanceToAll}/>
         )}
+        {group.key==='instagramPosts'&&(()=>{
+          const ig=local.settings.instagramSettings;
+          const igPatch=(patch:Generic)=>settingsPatch({instagramSettings:{...ig,...patch}});
+          return <div className={cardClass+' p-4 sm:p-6 space-y-4'}>
+            <h3 className="font-bold">Instagram Akışı Ayarları</h3>
+            <div className="grid sm:grid-cols-2 gap-4">
+              <TextControl label="Kullanıcı adı" value={ig.username} onChange={v=>igPatch({username:v})}/>
+              <label className="inline-flex items-center gap-3 rounded-xl bg-[#0b0b0f] border border-white/10 p-3 text-sm text-gray-200 self-end">
+                <input type="checkbox" className="accent-[#ff5a1f] w-5 h-5" checked={ig.showLikes} onChange={e=>igPatch({showLikes:e.target.checked})}/>Beğeni ve yorum sayılarını göster</label>
+              {([['postCountDesktop','Masaüstü gösterim adedi'],['postCountTablet','Tablet gösterim adedi'],['postCountMobile','Mobil gösterim adedi']] as const).map(([key,label])=>
+                <label key={key} className="block space-y-1.5"><span className="text-xs font-semibold text-gray-300">{label}</span>
+                  <input type="number" min="1" max="8" step="0.5" className={input} value={ig[key]} onChange={e=>igPatch({[key]:Number(e.target.value)})}/></label>)}
+            </div>
+          </div>;
+        })()}
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center justify-between">
           <div><h2 className="text-xl font-semibold">{group.name} Yönetimi</h2><p className="text-gray-400 text-xs mt-1">Her içerik için + ekle, kalem ile düzenle, çöp kutusuyla sil.</p></div>
           <button type="button" onClick={insertItem} className="flex gap-2 items-center justify-center px-4 py-3 rounded-xl bg-[#ff5a1f] hover:bg-[#ff733b] font-semibold text-sm"><Plus size={19}/>Yeni Paylaşım Ekle</button>
@@ -526,6 +566,10 @@ export const StudioDashboardPage: React.FC = () => {
           </>}
         </div>
       </section>}
+      {panel==='about'&&<AboutEditor value={local.about} onChange={next=>mutate(s=>({...s,about:next}))}/>}
+      {panel==='messages'&&<MessagesPanel onUnreadChange={setUnread}/>}
+      {panel==='subscribers'&&<SubscribersPanel/>}
+      {panel==='versions'&&<VersionsPanel isDirty={isDirty} onRestore={restoreVersion}/>}
       {panel==='newsletter'&&<section className={cardClass+' p-6 space-y-4'}>
         <h2 className="font-bold text-xl">Bülten ve İletişim</h2>
         <p className="text-sm text-gray-400">Bülten bloğunun adı ve açıklaması Blok Yerleşimi bölümünden; iletişim bilgileri ise Genel Ayarlar’dan değiştirilebilir.</p>
@@ -534,9 +578,9 @@ export const StudioDashboardPage: React.FC = () => {
       {panel==='support'&&<section className={cardClass+' p-6 space-y-5'}>
         <h2 className="font-bold text-xl">Gelişmiş İşlemler</h2>
         <div className="grid sm:grid-cols-2 gap-3">
-          <Link to="/admin/advanced" className="flex gap-2 justify-center items-center p-4 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-semibold"><Monitor size={18}/>Önceki Gelişmiş Stüdyoyu Aç</Link>
+          <a href="/api/site/export" download className="flex gap-2 justify-center items-center p-4 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-semibold"><Download size={18}/>Canlı Siteyi Sunucudan Dışa Aktar</a>
           <button type="button" onClick={()=>{const blob=new Blob([JSON.stringify(local,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const anchor=document.createElement('a');anchor.href=url;anchor.download='ismail-semih-site-yedek.json';anchor.click();URL.revokeObjectURL(url);}}
-            className="flex gap-2 justify-center items-center p-4 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-semibold"><Save size={18}/>JSON Yedek İndir</button>
+            className="flex gap-2 justify-center items-center p-4 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-semibold"><Save size={18}/>Taslağı JSON Yedek Olarak İndir</button>
         </div>
         <button type="button" className="rounded-xl bg-white/10 px-4 py-2 text-sm hover:bg-white/15"
           onClick={()=>{setAdvancedJson(JSON.stringify(local,null,2));setImportProblem('');}}>JSON ile Düzenle (Uzman)</button>
