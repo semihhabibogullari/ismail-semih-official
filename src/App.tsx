@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect } from 'react';
+import React, { Suspense, lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { SiteProvider, useSite } from './context/SiteContext';
 import { Navbar } from './components/layout/Navbar';
@@ -19,9 +19,11 @@ import { TrainingDetailPage } from './pages/TrainingDetailPage';
 import { AboutPage } from './pages/AboutPage';
 import { ContactPage } from './pages/ContactPage';
 import { NotFoundPage } from './pages/NotFoundPage';
-import { AdminLoginPage } from './pages/admin/AdminLoginPage';
-import { AdminDashboardPage } from './pages/admin/AdminDashboardPage';
-import { StudioDashboardPage } from './pages/admin/StudioDashboardPage';
+
+// Admin pages are loaded on demand so visitors do not download them.
+const AdminLoginPage = lazy(() => import('./pages/admin/AdminLoginPage').then(m => ({ default: m.AdminLoginPage })));
+const AdminDashboardPage = lazy(() => import('./pages/admin/AdminDashboardPage').then(m => ({ default: m.AdminDashboardPage })));
+const StudioDashboardPage = lazy(() => import('./pages/admin/StudioDashboardPage').then(m => ({ default: m.StudioDashboardPage })));
 
 // Scroll to top on route change
 function ScrollToTop() {
@@ -42,6 +44,7 @@ function AppLayout() {
       <ScrollToTop />
       {!isAdminRoute && <Navbar />}
       <main className="flex-1 w-full">
+        <Suspense fallback={<div className="min-h-[60vh]" />}>
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/podcast" element={<PodcastPage />} />
@@ -58,6 +61,7 @@ function AppLayout() {
           <Route path="/admin/advanced" element={<AdminDashboardPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </Suspense>
       </main>
       {!isAdminRoute && <Footer />}
     </div>

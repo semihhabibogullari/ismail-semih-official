@@ -16,3 +16,7 @@ data/site-data.json
 data/draft-data.json
 data/backups/
 public/uploads/
+
+# Visitor records (personal data)
+data/messages.json
+data/subscribers.json
