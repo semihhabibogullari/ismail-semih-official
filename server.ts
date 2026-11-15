@@ -236,7 +236,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'SAMEORIGIN', // the admin preview is a same-origin iframe
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
 };
 if (IS_PROD) SECURITY_HEADERS['Strict-Transport-Security'] = 'max-age=31536000';
 const mediaSource = MEDIA_ORIGIN ? ` ${MEDIA_ORIGIN}` : '';
