@@ -5,19 +5,62 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import 'dotenv/config';
+import crypto from 'node:crypto';
+import mysql from 'mysql2/promise';
+
+// Gerçek veritabanına ASLA dokunulmaz: DATABASE_URL'deki ad + "_smoke_test" geçici veritabanı oluşturulur ve sonunda silinir.
+if (!process.env.DATABASE_URL) {
+  console.error('SMOKE TEST: DATABASE_URL tanımlı değil (.env ya da ortam değişkeni).');
+  process.exit(1);
+}
+const realUrl = new URL(process.env.DATABASE_URL);
+const realDbName = decodeURIComponent(realUrl.pathname.replace(/^\//, ''));
+const testDbName = realDbName + '_smoke_test';
+if (!realDbName || realDbName.endsWith('_smoke_test') || testDbName === realDbName || !/^[A-Za-z0-9_$]+$/.test(testDbName) || testDbName.length > 64) {
+  console.error('SMOKE TEST: geçici veritabanı adı güvenli türetilemedi (' + testDbName + '). Test durduruldu.');
+  process.exit(1);
+}
+const testUrl = new URL(realUrl.href);
+testUrl.pathname = '/' + testDbName;
+const dbConfig = {
+  host: realUrl.hostname, port: Number(realUrl.port || 3306),
+  user: decodeURIComponent(realUrl.username), password: decodeURIComponent(realUrl.password),
+};
+let adminConn;
+try {
+  adminConn = await mysql.createConnection({ ...dbConfig, charset: 'utf8mb4' });
+  await adminConn.query('DROP DATABASE IF EXISTS `' + testDbName + '`');
+  await adminConn.query('CREATE DATABASE IF NOT EXISTS `' + testDbName + '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+} catch (e) {
+  console.error('SMOKE TEST: geçici veritabanı oluşturulamadı (' + (e.code || e.name) + '). Kullanıcının CREATE/DROP DATABASE yetkisi ve veritabanı sunucusunun çalıştığı gerekir.');
+  process.exit(1);
+}
+const testDb = await mysql.createConnection({ ...dbConfig, database: testDbName, charset: 'utf8mb4', timezone: 'Z' });
+
 const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ismail-smoke-'));
 const port = 36181;
 const base = `http://127.0.0.1:${port}`;
 const testUsername = 'ismailsemih';
 const testPassword = 'local-smoke-password-only-2026!';
-const server = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
-  env: { ...process.env, PORT: String(port), NODE_ENV: 'production', TRUST_PROXY: '1', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
-    STUDIO_DATA_DIR: path.join(isolatedRoot, 'data'), STUDIO_UPLOADS_DIR: path.join(isolatedRoot, 'uploads') },
-  stdio: ['ignore', 'pipe', 'pipe'],
-});
+let server;
 let logs = '';
-server.stdout.on('data', d => { logs += String(d); });
-server.stderr.on('data', d => { logs += String(d); });
+function launch() {
+  server = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
+    env: { ...process.env, PORT: String(port), NODE_ENV: 'production', TRUST_PROXY: '1', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
+      DATABASE_URL: testUrl.href, STUDIO_UPLOADS_DIR: path.join(isolatedRoot, 'uploads') },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  server.stdout.on('data', d => { logs += String(d); });
+  server.stderr.on('data', d => { logs += String(d); });
+}
+async function stop() {
+  if (!server || server.exitCode !== null) return;
+  const exited = new Promise(resolve => server.once('exit', resolve));
+  server.kill('SIGTERM');
+  await exited;
+}
+launch();
 
 const request = (path, options = {}) => fetch(base + path, options);
 const check = async () => {
@@ -310,10 +353,12 @@ try {
   }
   assert.equal((await request('/api/site')).headers.get('x-content-type-options'), 'nosniff');
 
-  // CSV export neutralises formulas and escapes quotes (records seeded straight into the isolated data dir).
+  // CSV export neutralises formulas and escapes quotes (records seeded straight into the temporary database).
   const evilEmails = ['=cmd@example.com', '+plus@example.com', '-minus@example.com', '@at@example.com', '\tTab@example.com', 'q"uote@example.com'];
-  fs.writeFileSync(path.join(isolatedRoot, 'data', 'subscribers.json'),
-    JSON.stringify(evilEmails.map((email, i) => ({ id: 'sub_csv_' + i, email, date: '2026-01-01T00:00:00.000Z', confirmed: true }))));
+  for (let i = 0; i < evilEmails.length; i++) {
+    await testDb.query('INSERT INTO subscribers (id, email, consent_at, created_at) VALUES (?, ?, ?, ?)',
+      ['sub_csv_' + i, evilEmails[i], new Date('2026-01-01T00:00:00Z'), new Date('2026-01-01T00:00:00Z')]);
+  }
   const csvText = await (await request('/api/newsletter/export', { headers: { cookie } })).text();
   for (const prefixed of ["'=cmd@example.com", "'+plus@example.com", "'-minus@example.com", "'@at@example.com", "'\tTab@example.com"]) {
     assert.ok(csvText.includes('"' + prefixed + '"'), 'CSV cell is neutralised: ' + JSON.stringify(prefixed));
@@ -334,17 +379,66 @@ try {
   const igConfig = await (await request('/api/instagram/config', { headers: { cookie } })).json();
   for (const gone of ['accessToken', 'connected', 'autoSync']) assert.equal(gone in igConfig.settings, false, gone + ' is gone');
 
+  // --- Stage 5: MySQL behaviour ---
+  const health = await request('/api/health');
+  assert.equal(health.status, 200, 'Health endpoint answers without a session');
+  assert.deepEqual(await health.json(), { ok: true });
+
+  assert.equal((await request('/api/auth/change-password', { method: 'POST', headers: { cookie, ...json }, body: '{}' })).status, 404, 'change-password endpoint is gone');
+
+  const sessionToken = cookie.split('=')[1];
+  const sha = (t) => crypto.createHash('sha256').update(t).digest('hex');
+  const [sessionRows] = await testDb.query('SELECT token_hash FROM admin_sessions');
+  assert.ok(sessionRows.length >= 1);
+  assert.ok(sessionRows.every((r) => /^[0-9a-f]{64}$/.test(r.token_hash) && r.token_hash !== sessionToken), 'Raw session tokens are never stored');
+  assert.ok(sessionRows.some((r) => r.token_hash === sha(sessionToken)), 'Session is stored as sha256(token)');
+
+  // An expired session is rejected and purged at the next startup.
+  const expiredToken = crypto.randomBytes(32).toString('hex');
+  await testDb.query('INSERT INTO admin_sessions (token_hash, expires_at, created_at) VALUES (?, ?, ?)',
+    [sha(expiredToken), new Date(Date.now() - 60000), new Date(Date.now() - 120000)]);
+  assert.equal((await (await request('/api/auth/status', { headers: { cookie: 'admin_session=' + expiredToken } })).json()).isAuthenticated, false, 'Expired session is invalid');
+
+  // Only the newest 20 versions are kept.
+  for (let i = 0; i < 25; i++) {
+    assert.equal((await request('/api/site/publish', { method: 'POST', headers: { cookie, ...json }, body: JSON.stringify({ note: 'Toplu yayın ' + i }) })).status, 200);
+  }
+  const manyVersions = (await (await request('/api/site/backups', { headers: { cookie } })).json()).backups;
+  assert.equal(manyVersions.length, 20, 'Version history is capped at 20');
+  const [[versionCount]] = await testDb.query('SELECT COUNT(*) AS n FROM content_versions');
+  assert.equal(Number(versionCount.n), 20);
+
+  // Server restart: session, published content, draft and records survive.
+  const beforeRestart = await (await request('/api/site')).json();
+  const draftBeforeRestart = await (await request('/api/site/draft', { headers: { cookie } })).json();
+  await stop();
+  launch();
+  await check();
+  assert.equal((await (await request('/api/auth/status', { headers: { cookie } })).json()).isAuthenticated, true, 'Session survives a restart');
+  const afterRestart = await (await request('/api/site')).json();
+  assert.equal(afterRestart.version, beforeRestart.version, 'Published version survives a restart');
+  assert.equal(afterRestart.data.settings.siteTitle, beforeRestart.data.settings.siteTitle);
+  const draftAfterRestart = await (await request('/api/site/draft', { headers: { cookie } })).json();
+  assert.equal(JSON.stringify(draftAfterRestart.data), JSON.stringify(draftBeforeRestart.data), 'Draft survives a restart');
+  const [[expiredLeft]] = await testDb.query('SELECT COUNT(*) AS n FROM admin_sessions WHERE token_hash = ?', [sha(expiredToken)]);
+  assert.equal(Number(expiredLeft.n), 0, 'Expired sessions are purged at startup');
+  assert.equal((await (await request('/api/newsletter/list', { headers: { cookie } })).json()).subscribers.some((x) => x.email.startsWith('rl')), true, 'Subscribers survive a restart');
+
   const logout = await request('/api/auth/logout', { method: 'POST', headers: { cookie } });
   assert.equal(logout.status, 200);
   const oldSession = await request('/api/site/draft', { headers: { cookie } });
   assert.equal(oldSession.status, 401);
+  const [[afterLogout]] = await testDb.query('SELECT COUNT(*) AS n FROM admin_sessions WHERE token_hash = ?', [sha(sessionToken)]);
+  assert.equal(Number(afterLogout.n), 0, 'Logout deletes the session row');
 
-  process.stdout.write('PASS: public data, login/logout, cookie auth, secret isolation, URL preview permission, removed AI endpoints, _en cleanup, hidden-content filter, form validation, rate limits, body limits, security headers, CSV escaping, SSRF list.\n');
+  process.stdout.write('PASS: MySQL (health, hashed sessions, restart persistence, 20-version cap), public data, login/logout, cookie auth, secret isolation, URL preview permission, removed AI endpoints, _en cleanup, hidden-content filter, form validation, rate limits, body limits, security headers, CSV escaping, SSRF list.\n');
 } catch (error) {
   process.stderr.write('SMOKE TEST FAILED: ' + error.stack + '\n' + logs.slice(-1800) + '\n');
   process.exitCode = 1;
 } finally {
-  server.kill('SIGTERM');
-  // The smoke suite deliberately never edits the developer's real site files.
+  await stop().catch(() => {});
+  try { await testDb.end(); } catch {}
+  try { await adminConn.query('DROP DATABASE IF EXISTS `' + testDbName + '`'); } catch {}
+  try { await adminConn.end(); } catch {}
   fs.rmSync(isolatedRoot, { recursive: true, force: true });
 }

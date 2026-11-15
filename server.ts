@@ -13,6 +13,9 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { initialSiteData } from './src/data/initialData';
 import { SiteData } from './src/types';
+import { createPool, describeDbError, pingDb, runMigrations } from './server/db';
+import * as store from './server/store';
+import { migrateSiteData } from './server/store';
 
 dotenv.config();
 
@@ -20,6 +23,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+const pool = (() => {
+  try {
+    return createPool();
+  } catch (err: any) {
+    console.error('Veritabanı ayarı hatalı:', err?.message || 'bilinmeyen hata');
+    process.exit(1);
+  }
+})();
 const PORT = Number(process.env.PORT) || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
 
@@ -41,191 +52,53 @@ function configuredMediaOrigin(): string | null {
 }
 const MEDIA_ORIGIN = configuredMediaOrigin();
 
-// Directories
-const DATA_DIR = process.env.STUDIO_DATA_DIR ? path.resolve(process.env.STUDIO_DATA_DIR) : path.resolve(__dirname, 'data');
-const BACKUPS_DIR = path.resolve(DATA_DIR, 'backups');
+// Directories (only the uploads folder is left on disk; Stage 6 moves media to R2)
 const UPLOADS_DIR = process.env.STUDIO_UPLOADS_DIR ? path.resolve(process.env.STUDIO_UPLOADS_DIR) : path.resolve(__dirname, 'public/uploads');
-const SITE_DATA_FILE = path.resolve(DATA_DIR, 'site-data.json');
-const DRAFT_DATA_FILE = path.resolve(DATA_DIR, 'draft-data.json');
-const MESSAGES_FILE = path.resolve(DATA_DIR, 'messages.json');
-const SUBSCRIBERS_FILE = path.resolve(DATA_DIR, 'subscribers.json');
-const AUTH_FILE = path.resolve(DATA_DIR, 'auth.json');
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-// Ensure directories exist
-[DATA_DIR, BACKUPS_DIR, UPLOADS_DIR].forEach((dir) => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-});
-
-// Helper for atomic file write
-function safeWriteJson(filePath: string, data: any) {
-  const tempPath = `${filePath}.tmp.${process.pid}.${crypto.randomBytes(6).toString('hex')}`;
-  fs.writeFileSync(tempPath, JSON.stringify(data, null, 2), { encoding: 'utf-8', mode: 0o600 });
-  fs.renameSync(tempPath, filePath);
-}
-
-function safeReadJson<T>(filePath: string, defaultValue: T): T {
-  try {
-    if (!fs.existsSync(filePath)) {
-      safeWriteJson(filePath, defaultValue);
-      return defaultValue;
-    }
-    const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    return parsed;
-  } catch (err) {
-    console.error(`Error reading ${filePath}:`, err);
-    return defaultValue;
-  }
-}
-
-// Site is Turkish-only: drop every legacy "*_en" key (recursively) from any loaded
-// SiteData (published, draft, backups, imports) so old files still open cleanly.
-function stripEnglishKeys<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((item) => stripEnglishKeys(item)) as unknown as T;
-  if (value && typeof value === 'object') {
-    const out: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
-      if (key.endsWith('_en')) continue;
-      out[key] = stripEnglishKeys(val);
-    }
-    return out as T;
-  }
-  return value;
-}
-
-// Deep merge helper to ensure backward compatibility with earlier data files
-function migrateSiteData(rawExisting: any, defaults: SiteData): SiteData {
-  const existing = stripEnglishKeys(rawExisting);
-  if (!existing || typeof existing !== 'object') return defaults;
-
-  // Never copy credential fields into public site data, drafts, or backups.
-  // Legacy Instagram API fields (token, connected, autoSync) are dropped from stored data.
-  const {
-    accessToken: _legacyToken, tokenExpiresAt: _legacyExpiry, connected: _legacyConnected, autoSync: _legacyAutoSync,
-    ...safeInstagramSettings
-  } = existing.settings?.instagramSettings || {};
-
-  return {
-    ...defaults,
-    ...existing,
-    settings: {
-      ...defaults.settings,
-      ...(existing.settings || {}),
-      darkTheme: {
-        ...defaults.settings.darkTheme,
-        ...(existing.settings?.darkTheme || {}),
-      },
-      lightTheme: {
-        ...defaults.settings.lightTheme,
-        ...(existing.settings?.lightTheme || {}),
-      },
-      typography: {
-        ...defaults.settings.typography,
-        ...(existing.settings?.typography || {}),
-      },
-      sliderSettings: {
-        ...defaults.settings.sliderSettings,
-        ...(existing.settings?.sliderSettings || {}),
-      },
-      instagramSettings: {
-        ...defaults.settings.instagramSettings,
-        ...safeInstagramSettings,
-      },
-    },
-    sections: existing.sections && existing.sections.length > 0
-      ? (existing.sections.some((s: any) => s.type === 'instagram')
-          ? existing.sections
-          : [
-              ...existing.sections.slice(0, 3),
-              defaults.sections.find((s) => s.type === 'instagram')!,
-              ...existing.sections.slice(3),
-            ].map((s: any, idx: number) => ({ ...s, order: idx + 1 })))
-      : defaults.sections,
-    instagramPosts: Array.isArray(existing.instagramPosts)
-      ? existing.instagramPosts
-      : defaults.instagramPosts,
-    about: {
-      ...defaults.about,
-      ...(existing.about && typeof existing.about === 'object' ? existing.about : {}),
-      skills: Array.isArray(existing.about?.skills) ? existing.about.skills : defaults.about.skills,
-      plays: Array.isArray(existing.about?.plays) ? existing.about.plays : defaults.about.plays,
-    },
-  };
-}
-
-// Authentication: old (publicly bootstrapped) credentials are deliberately retired.
-interface AuthConfig {
-  passwordHash: string;
-  salt: string;
-  version: 2;
-}
-
+// Authentication: the single admin account comes from ADMIN_USERNAME / ADMIN_PASSWORD (.env).
+// A scrypt digest of the password is generated in memory at startup; the plain value is never stored.
 function hashPassword(password: string, salt: string): string {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
 
-function passwordMatches(password: string, config: AuthConfig): boolean {
-  const candidate = Buffer.from(hashPassword(password, config.salt), 'hex');
-  const expected = Buffer.from(config.passwordHash, 'hex');
-  return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
-}
-
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME?.trim() || 'ismailsemih';
 
-const initialAuth = fs.existsSync(AUTH_FILE)
-  ? safeReadJson<Partial<AuthConfig> | null>(AUTH_FILE, null)
-  : null;
-let authConfig: AuthConfig | null =
-  initialAuth?.version === 2 &&
-  typeof initialAuth.salt === 'string' &&
-  typeof initialAuth.passwordHash === 'string'
-    ? initialAuth as AuthConfig
-    : null;
-
-// Store the real password exclusively as a deployment secret. A changed secret
-// replaces an earlier stored hash at the next server startup.
+let adminCredential: { salt: string; hash: string } | null = null;
 const bootstrapPassword = process.env.ADMIN_PASSWORD;
 if (bootstrapPassword) {
   if (bootstrapPassword.length < 12 || bootstrapPassword.length > 1024) {
     throw new Error('ADMIN_PASSWORD 12–1024 karakter olmalıdır.');
   }
-  if (!authConfig || !passwordMatches(bootstrapPassword, authConfig)) {
-    const salt = crypto.randomBytes(32).toString('hex');
-    authConfig = { version: 2, salt, passwordHash: hashPassword(bootstrapPassword, salt) };
-    safeWriteJson(AUTH_FILE, authConfig);
-    console.info('Yönetici şifresi güvenli ayarlardan yapılandırıldı.');
-  }
-} else if (!authConfig) {
+  const salt = crypto.randomBytes(32).toString('hex');
+  adminCredential = { salt, hash: hashPassword(bootstrapPassword, salt) };
+} else {
   console.warn('Yönetici girişi kapalı: ADMIN_PASSWORD gizli ayarını kullanın.');
 }
 
-// Sessions are opaque, HttpOnly-cookie-only and expire server-side.
-const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
-const activeSessions = new Map<string, number>();
-const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
-
-function sessionToken(req: Request): string | null {
-  const token: unknown = req.cookies?.admin_session;
-  if (typeof token !== 'string') return null;
-  const expiresAt = activeSessions.get(token);
-  if (!expiresAt) return null;
-  if (expiresAt <= Date.now()) {
-    activeSessions.delete(token);
-    return null;
-  }
-  return token;
+function passwordMatches(password: string): boolean {
+  if (!adminCredential) return false;
+  const candidate = Buffer.from(hashPassword(password, adminCredential.salt), 'hex');
+  const expected = Buffer.from(adminCredential.hash, 'hex');
+  return candidate.length === expected.length && crypto.timingSafeEqual(candidate, expected);
 }
 
-// Initialize Site Data with backward compatible migration
-let rawPublished = safeReadJson<any>(SITE_DATA_FILE, initialSiteData);
-let publishedData: SiteData = migrateSiteData(rawPublished, initialSiteData);
-safeWriteJson(SITE_DATA_FILE, publishedData);
+// Sessions are opaque, HttpOnly-cookie-only and stored in MySQL as a sha256 hash with a server-side expiry.
+// Rate-limit counters below stay in memory: this app assumes a single server process.
+const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+const loginAttempts = new Map<string, { count: number; lastAttempt: number }>();
 
-let rawDraft = safeReadJson<any>(DRAFT_DATA_FILE, publishedData);
-let draftData: SiteData = migrateSiteData(rawDraft, publishedData);
-safeWriteJson(DRAFT_DATA_FILE, draftData);
+async function sessionToken(req: Request): Promise<string | null> {
+  const token: unknown = req.cookies?.admin_session;
+  if (typeof token !== 'string' || !/^[0-9a-f]{64}$/.test(token)) return null;
+  return (await store.sessionIsValid(token)) ? token : null;
+}
+
+// Express 4 does not catch rejected promises: wrap async handlers so DB errors answer with JSON 500.
+type AsyncHandler = (req: Request, res: Response, next: NextFunction) => Promise<unknown>;
+const ah = (fn: AsyncHandler) => (req: Request, res: Response, next: NextFunction) => {
+  fn(req, res, next).catch(next);
+};
 
 // Express Middlewares
 app.disable('x-powered-by');
@@ -264,13 +137,13 @@ app.use((_req: Request, res: Response, next: NextFunction) => {
 const smallJson = express.json({ limit: '50kb' });
 const adminJson = express.json({ limit: '5mb' });
 app.use(cookieParser());
-app.use('/api', (req: Request, res: Response, next: NextFunction) => {
+app.use('/api', ah(async (req: Request, res: Response, next: NextFunction) => {
   const bigAdminUpload = req.method === 'POST' && ['/site/draft', '/site/import'].includes(req.path);
   if (!bigAdminUpload) return smallJson(req, res, next);
   // Never buffer a large body for an anonymous visitor.
-  if (!sessionToken(req)) return res.status(401).json({ error: 'Yetkisiz erişim. Lütfen giriş yapınız.' });
+  if (!(await sessionToken(req))) return res.status(401).json({ error: 'Yetkisiz erişim. Lütfen giriş yapınız.' });
   return adminJson(req, res, next);
-});
+}));
 app.use('/uploads', express.static(UPLOADS_DIR, {
   setHeaders: (res) => { res.setHeader('X-Content-Type-Options', 'nosniff'); },
 }));
@@ -339,12 +212,12 @@ const newsletterRateLimit = createRateLimiter(10, 60 * 60 * 1000);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Auth Middleware
-function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (!sessionToken(req)) {
+const requireAuth = ah(async (req: Request, res: Response, next: NextFunction) => {
+  if (!(await sessionToken(req))) {
     return res.status(401).json({ error: 'Yetkisiz erişim. Lütfen giriş yapınız.' });
   }
   next();
-}
+});
 
 // Multer Upload configuration
 const storage = multer.diskStorage({
@@ -375,28 +248,27 @@ const upload = multer({
 // --- API ROUTES ---
 
 // 1. Auth Endpoints
-app.post('/api/auth/login', checkLoginRateLimit, (req: Request, res: Response) => {
-  // Allow secure local setup to take effect without restarting the preview.
-  // An explicit ADMIN_PASSWORD secret always takes precedence over the file.
-  if (!process.env.ADMIN_PASSWORD && fs.existsSync(AUTH_FILE)) {
-    const persisted = safeReadJson<Partial<AuthConfig> | null>(AUTH_FILE, null);
-    if (persisted?.version === 2 &&
-        typeof persisted.salt === 'string' && /^[0-9a-f]{64}$/i.test(persisted.salt) &&
-        typeof persisted.passwordHash === 'string' && /^[0-9a-f]{128}$/i.test(persisted.passwordHash)) {
-      authConfig = persisted as AuthConfig;
-    }
+app.get('/api/health', ah(async (_req: Request, res: Response) => {
+  try {
+    await pingDb(pool);
+    return res.json({ ok: true });
+  } catch {
+    return res.status(503).json({ ok: false });
   }
+}));
+
+app.post('/api/auth/login', checkLoginRateLimit, ah(async (req: Request, res: Response) => {
   const username: unknown = req.body?.username;
   const password: unknown = req.body?.password;
   const ip = req.ip || req.socket.remoteAddress || 'unknown';
-  if (!authConfig) {
+  if (!adminCredential) {
     return res.status(503).json({ error: 'Yönetici hesabı henüz kurulmamış. Sunucuda ADMIN_PASSWORD gizli ayarını tanımlayın.' });
   }
   if (typeof username !== 'string' || !username.trim() || username.length > 128 ||
       typeof password !== 'string' || !password || password.length > 1024) {
     return res.status(400).json({ error: 'Kullanıcı adı ve şifre gereklidir.' });
   }
-  const validPassword = passwordMatches(password, authConfig);
+  const validPassword = passwordMatches(password);
   if (username.trim() !== ADMIN_USERNAME || !validPassword) {
     const now = Date.now();
     const previous = loginAttempts.get(ip);
@@ -408,7 +280,7 @@ app.post('/api/auth/login', checkLoginRateLimit, (req: Request, res: Response) =
 
   loginAttempts.delete(ip);
   const token = crypto.randomBytes(32).toString('hex');
-  activeSessions.set(token, Date.now() + SESSION_LIFETIME_MS);
+  await store.createSession(token, new Date(Date.now() + SESSION_LIFETIME_MS));
   res.cookie('admin_session', token, {
     httpOnly: true,
     sameSite: 'strict',
@@ -418,38 +290,18 @@ app.post('/api/auth/login', checkLoginRateLimit, (req: Request, res: Response) =
   });
   // Never return the session credential to JavaScript.
   return res.json({ success: true, message: 'Giriş başarılı.' });
-});
+}));
 
-app.post('/api/auth/logout', (req: Request, res: Response) => {
-  const token = sessionToken(req);
-  if (token) activeSessions.delete(token);
+app.post('/api/auth/logout', ah(async (req: Request, res: Response) => {
+  const token: unknown = req.cookies?.admin_session;
+  if (typeof token === 'string' && /^[0-9a-f]{64}$/.test(token)) await store.deleteSession(token);
   res.clearCookie('admin_session', { path: '/', sameSite: 'strict', secure: IS_PROD });
   return res.json({ success: true, message: 'Çıkış yapıldı.' });
-});
+}));
 
-app.get('/api/auth/status', (req: Request, res: Response) => {
-  return res.json({ isAuthenticated: Boolean(sessionToken(req)) });
-});
-
-app.post('/api/auth/change-password', requireAuth, (req: Request, res: Response) => {
-  if (process.env.ADMIN_PASSWORD) {
-    return res.status(409).json({ error: 'Şifre sunucunun ADMIN_PASSWORD gizli ayarından yönetilir.' });
-  }
-  const { currentPassword, newPassword } = req.body || {};
-  if (typeof currentPassword !== 'string' || typeof newPassword !== 'string' ||
-      newPassword.length < 12 || newPassword.length > 1024) {
-    return res.status(400).json({ error: 'Yeni parola en az 12 karakter olmalıdır.' });
-  }
-  if (!authConfig || !passwordMatches(currentPassword, authConfig)) {
-    return res.status(400).json({ error: 'Mevcut parola hatalı.' });
-  }
-  const salt = crypto.randomBytes(32).toString('hex');
-  authConfig = { version: 2, salt, passwordHash: hashPassword(newPassword, salt) };
-  safeWriteJson(AUTH_FILE, authConfig);
-  activeSessions.clear();
-  res.clearCookie('admin_session', { path: '/', sameSite: 'strict', secure: IS_PROD });
-  return res.json({ success: true, message: 'Parola değiştirildi. Lütfen yeniden giriş yapın.' });
-});
+app.get('/api/auth/status', ah(async (req: Request, res: Response) => {
+  return res.json({ isAuthenticated: Boolean(await sessionToken(req)) });
+}));
 
 // 2. Site Data Endpoints (Public & Draft)
 // Public response only: hide unpublished / inactive items (the admin draft stays complete).
@@ -464,7 +316,8 @@ function publicSiteView(data: SiteData): SiteData {
 }
 
 app.get('/api/site', (_req: Request, res: Response) => {
-  const hasDraftChanges = JSON.stringify(publishedData) !== JSON.stringify(draftData);
+  const publishedData = store.getPublished();
+  const hasDraftChanges = JSON.stringify(publishedData) !== JSON.stringify(store.getDraft());
   res.json({
     data: publicSiteView(publishedData),
     version: publishedData.version,
@@ -474,105 +327,74 @@ app.get('/api/site', (_req: Request, res: Response) => {
 
 app.get('/api/site/draft', requireAuth, (_req: Request, res: Response) => {
   res.json({
-    data: draftData,
+    data: store.getDraft(),
     isDraft: true,
   });
 });
 
-app.post('/api/site/draft', requireAuth, (req: Request, res: Response) => {
+app.post('/api/site/draft', requireAuth, ah(async (req: Request, res: Response) => {
   const newDraft = req.body;
   if (!newDraft || typeof newDraft !== 'object') {
     return res.status(400).json({ error: 'Geçersiz veri paketi.' });
   }
-  draftData = migrateSiteData({
-    ...draftData,
+  const draftData = await store.updateDraft((current) => migrateSiteData({
+    ...current,
     ...newDraft,
     updatedAt: new Date().toISOString(),
-  }, initialSiteData);
-  safeWriteJson(DRAFT_DATA_FILE, draftData);
+  }, initialSiteData));
   return res.json({ success: true, data: draftData, message: 'Taslak kaydedildi.' });
-});
+}));
 
-app.post('/api/site/publish', requireAuth, (req: Request, res: Response) => {
-  const note = req.body?.note || 'Yönetim panelinden canlıya yayınlandı';
-  const newVersionNumber = (publishedData.version || 1) + 1;
-
-  const backupId = `version_v${publishedData.version}_${Date.now()}`;
-  const backupEntry = {
-    id: backupId,
-    timestamp: new Date().toISOString(),
-    versionNumber: publishedData.version,
-    note,
-    data: publishedData,
-  };
-  safeWriteJson(path.resolve(BACKUPS_DIR, `${backupId}.json`), backupEntry);
-
-  publishedData = {
-    ...draftData,
-    version: newVersionNumber,
-    updatedAt: new Date().toISOString(),
-  };
-  draftData = { ...publishedData };
-
-  safeWriteJson(SITE_DATA_FILE, publishedData);
-  safeWriteJson(DRAFT_DATA_FILE, draftData);
+app.post('/api/site/publish', requireAuth, ah(async (req: Request, res: Response) => {
+  const rawNote = req.body?.note;
+  const note = typeof rawNote === 'string' && rawNote.trim() ? rawNote.trim() : 'Yönetim panelinden canlıya yayınlandı';
+  const publishedData = await store.publishDraft(note);
 
   return res.json({
     success: true,
     data: publishedData,
-    version: newVersionNumber,
+    version: publishedData.version,
     message: 'Site başarıyla canlıya yayınlandı ve sürüm yedeklendi.',
   });
-});
+}));
 
 // 3. Backups & Versions
-app.get('/api/site/backups', requireAuth, (_req: Request, res: Response) => {
+app.get('/api/site/backups', requireAuth, ah(async (_req: Request, res: Response) => {
   try {
-    const files = fs.readdirSync(BACKUPS_DIR).filter((f) => f.endsWith('.json'));
-    const backups = files.map((file) => {
-      const content = safeReadJson<any>(path.resolve(BACKUPS_DIR, file), null);
-      return {
-        id: content?.id || path.basename(file, '.json'),
-        timestamp: content?.timestamp || '',
-        versionNumber: content?.versionNumber || 0,
-        note: content?.note || 'Otomatik Sürüm Yedeklemesi',
-      };
-    }).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-    res.json({ backups });
-  } catch (err) {
+    res.json({ backups: await store.listVersions() });
+  } catch {
     res.status(500).json({ error: 'Yedek listesi alınamadı.' });
   }
-});
+}));
 
-app.post('/api/site/restore', requireAuth, (req: Request, res: Response) => {
-  const { backupId } = req.body;
+app.post('/api/site/restore', requireAuth, ah(async (req: Request, res: Response) => {
+  const backupId = req.body?.backupId;
   if (typeof backupId !== 'string' || !/^version_v\d+_\d+$/.test(backupId)) {
     return res.status(400).json({ error: 'Geçersiz yedek kimliği.' });
   }
 
-  const targetFile = path.resolve(BACKUPS_DIR, `${backupId}.json`);
-  if (!fs.existsSync(targetFile)) {
+  const backup = await store.getVersion(backupId);
+  if (!backup) {
     return res.status(404).json({ error: 'Belirtilen sürüm yedeği bulunamadı.' });
   }
-
-  const backup = safeReadJson<any>(targetFile, null);
-  if (!backup || !backup.data) {
+  if (!backup.data) {
     return res.status(400).json({ error: 'Yedek verisi bozuk veya geçersiz.' });
   }
 
-  draftData = migrateSiteData(backup.data, initialSiteData);
-  draftData.updatedAt = new Date().toISOString();
-  safeWriteJson(DRAFT_DATA_FILE, draftData);
+  const draftData = await store.updateDraft(() => ({
+    ...migrateSiteData(backup.data, initialSiteData),
+    updatedAt: new Date().toISOString(),
+  }));
 
   return res.json({
     success: true,
     data: draftData,
     message: `Sürüm v${backup.versionNumber} taslak olarak geri yüklendi. Önizleyip canlıya yayınlayabilirsiniz.`,
   });
-});
+}));
 
 app.get('/api/site/export', requireAuth, (_req: Request, res: Response) => {
+  const publishedData = store.getPublished();
   const exportPayload = {
     exportedAt: new Date().toISOString(),
     version: publishedData.version,
@@ -583,7 +405,7 @@ app.get('/api/site/export', requireAuth, (_req: Request, res: Response) => {
   res.send(JSON.stringify(exportPayload, null, 2));
 });
 
-app.post('/api/site/import', requireAuth, (req: Request, res: Response) => {
+app.post('/api/site/import', requireAuth, ah(async (req: Request, res: Response) => {
   const payload = req.body;
   const dataToImport = payload?.data || payload;
 
@@ -591,16 +413,17 @@ app.post('/api/site/import', requireAuth, (req: Request, res: Response) => {
     return res.status(400).json({ error: 'Yüklenen JSON dosyası geçerli bir site yedeği içermiyor.' });
   }
 
-  draftData = migrateSiteData(dataToImport, initialSiteData);
-  draftData.updatedAt = new Date().toISOString();
-  safeWriteJson(DRAFT_DATA_FILE, draftData);
+  const draftData = await store.updateDraft(() => ({
+    ...migrateSiteData(dataToImport, initialSiteData),
+    updatedAt: new Date().toISOString(),
+  }));
 
   return res.json({
     success: true,
     data: draftData,
     message: 'Yedek taslak olarak başarıyla içe aktarıldı. Kontrol ettikten sonra Canlıya Yayınlayabilirsiniz.',
   });
-});
+}));
 
 // 4. Universal Media & URL Preview System
 function isBlockedHostname(rawHost: string): boolean {
@@ -770,26 +593,34 @@ app.post('/api/video/preview', requireAuth, async (req: Request, res: Response) 
 
 // 5. Instagram Integration APIs
 app.get('/api/instagram/config', requireAuth, (_req: Request, res: Response) => {
+  const draftData = store.getDraft();
   res.json({
     settings: draftData.settings.instagramSettings,
     postCount: draftData.instagramPosts.length,
   });
 });
 
-app.post('/api/instagram/config', requireAuth, (req: Request, res: Response) => {
+app.post('/api/instagram/config', requireAuth, ah(async (req: Request, res: Response) => {
   const { username, showLikes, postCountDesktop, postCountTablet, postCountMobile } = req.body || {};
-  const currentSettings = draftData.settings.instagramSettings;
-  draftData.settings.instagramSettings = {
-    ...currentSettings,
-    username: username || currentSettings.username,
-    showLikes: showLikes ?? currentSettings.showLikes,
-    postCountDesktop: postCountDesktop || currentSettings.postCountDesktop,
-    postCountTablet: postCountTablet || currentSettings.postCountTablet,
-    postCountMobile: postCountMobile || currentSettings.postCountMobile,
-  };
-  safeWriteJson(DRAFT_DATA_FILE, draftData);
+  const draftData = await store.updateDraft((current) => {
+    const currentSettings = current.settings.instagramSettings;
+    return {
+      ...current,
+      settings: {
+        ...current.settings,
+        instagramSettings: {
+          ...currentSettings,
+          username: username || currentSettings.username,
+          showLikes: showLikes ?? currentSettings.showLikes,
+          postCountDesktop: postCountDesktop || currentSettings.postCountDesktop,
+          postCountTablet: postCountTablet || currentSettings.postCountTablet,
+          postCountMobile: postCountMobile || currentSettings.postCountMobile,
+        },
+      },
+    };
+  });
   res.json({ success: true, settings: draftData.settings.instagramSettings, message: 'Instagram ayarları güncellendi.' });
-});
+}));
 
 // 7. Media Library & Upload
 app.post('/api/media/upload', requireAuth, upload.single('file'), (req: Request, res: Response) => {
@@ -846,7 +677,7 @@ app.delete('/api/media/delete', requireAuth, (req: Request, res: Response) => {
 });
 
 // 8. Contact & Newsletter
-app.post('/api/contact', contactRateLimit, (req: Request, res: Response) => {
+app.post('/api/contact', contactRateLimit, ah(async (req: Request, res: Response) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const { name: rawName, email: rawEmail, subject: rawSubject, message: rawMessage } = body;
   if ([rawName, rawEmail, rawMessage].some((v) => typeof v !== 'string') ||
@@ -867,47 +698,26 @@ app.post('/api/contact', contactRateLimit, (req: Request, res: Response) => {
   if (subject.length > 150) return res.status(400).json({ error: 'Konu en fazla 150 karakter olabilir.' });
   if (message.length > 5000) return res.status(400).json({ error: 'Mesaj en fazla 5000 karakter olabilir.' });
 
-  const messages = safeReadJson<any[]>(MESSAGES_FILE, []);
-  const newMsg = {
-    id: `msg_${Date.now()}`,
-    name,
-    email,
-    subject: subject || 'Genel İletişim',
-    message,
-    date: new Date().toISOString(),
-    read: false,
-  };
-  messages.unshift(newMsg);
-  safeWriteJson(MESSAGES_FILE, messages);
+  await store.addMessage({ name, email, subject: subject || 'Genel İletişim', message });
 
   return res.json({ success: true, message: 'Mesajınız başarıyla iletildi. En kısa sürede dönüş yapılacaktır.' });
-});
+}));
 
-app.get('/api/contact/list', requireAuth, (_req: Request, res: Response) => {
-  const messages = safeReadJson<any[]>(MESSAGES_FILE, []);
-  res.json({ messages });
-});
+app.get('/api/contact/list', requireAuth, ah(async (_req: Request, res: Response) => {
+  res.json({ messages: await store.listMessages() });
+}));
 
-app.post('/api/contact/mark-read', requireAuth, (req: Request, res: Response) => {
-  const { id } = req.body;
-  const messages = safeReadJson<any[]>(MESSAGES_FILE, []);
-  const found = messages.find((m) => m.id === id);
-  if (found) {
-    found.read = true;
-    safeWriteJson(MESSAGES_FILE, messages);
-  }
+app.post('/api/contact/mark-read', requireAuth, ah(async (req: Request, res: Response) => {
+  await store.markMessageRead(req.body?.id);
   res.json({ success: true });
-});
+}));
 
-app.delete('/api/contact/delete', requireAuth, (req: Request, res: Response) => {
-  const { id } = req.body;
-  let messages = safeReadJson<any[]>(MESSAGES_FILE, []);
-  messages = messages.filter((m) => m.id !== id);
-  safeWriteJson(MESSAGES_FILE, messages);
+app.delete('/api/contact/delete', requireAuth, ah(async (req: Request, res: Response) => {
+  await store.deleteMessage(req.body?.id);
   res.json({ success: true });
-});
+}));
 
-app.post('/api/newsletter/subscribe', newsletterRateLimit, (req: Request, res: Response) => {
+app.post('/api/newsletter/subscribe', newsletterRateLimit, ah(async (req: Request, res: Response) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const { email: rawEmail, consent } = body;
   const email = typeof rawEmail === 'string' ? rawEmail.trim() : '';
@@ -918,39 +728,26 @@ app.post('/api/newsletter/subscribe', newsletterRateLimit, (req: Request, res: R
     return res.status(400).json({ error: 'Lütfen KVKK ve iletişim onay kutusunu işaretleyiniz.' });
   }
 
-  const subscribers = safeReadJson<any[]>(SUBSCRIBERS_FILE, []);
-  const exists = subscribers.some((s) => s.email.toLowerCase() === email.toLowerCase());
-  if (exists) {
+  if (!(await store.addSubscriber(email))) {
     return res.json({ success: true, message: 'E-posta adresiniz zaten bültenimize kayıtlı. Teşekkürler!' });
   }
 
-  const newSub = {
-    id: `sub_${Date.now()}`,
-    email: email.toLowerCase(),
-    date: new Date().toISOString(),
-    confirmed: true,
-  };
-  subscribers.unshift(newSub);
-  safeWriteJson(SUBSCRIBERS_FILE, subscribers);
-
   return res.json({ success: true, message: 'Bültene kaydınız başarıyla tamamlandı!' });
-});
+}));
 
-app.get('/api/newsletter/list', requireAuth, (_req: Request, res: Response) => {
-  const subscribers = safeReadJson<any[]>(SUBSCRIBERS_FILE, []);
-  res.json({ subscribers });
-});
+app.get('/api/newsletter/list', requireAuth, ah(async (_req: Request, res: Response) => {
+  res.json({ subscribers: await store.listSubscribers() });
+}));
 
-app.delete('/api/newsletter/delete', requireAuth, (req: Request, res: Response) => {
+app.delete('/api/newsletter/delete', requireAuth, ah(async (req: Request, res: Response) => {
   const { id } = req.body || {};
   if (typeof id !== 'string' || !id) return res.status(400).json({ error: 'Abone kimliği gerekli.' });
-  const subscribers = safeReadJson<any[]>(SUBSCRIBERS_FILE, []);
-  safeWriteJson(SUBSCRIBERS_FILE, subscribers.filter((s) => s.id !== id));
+  await store.deleteSubscriber(id);
   res.json({ success: true });
-});
+}));
 
-app.get('/api/newsletter/export', requireAuth, (_req: Request, res: Response) => {
-  const subscribers = safeReadJson<any[]>(SUBSCRIBERS_FILE, []);
+app.get('/api/newsletter/export', requireAuth, ah(async (_req: Request, res: Response) => {
+  const subscribers = await store.listSubscribers();
   // Neutralise spreadsheet formula injection and escape quotes in every cell.
   const csvCell = (value: unknown) => {
     let text = String(value ?? '');
@@ -964,15 +761,16 @@ app.get('/api/newsletter/export', requireAuth, (_req: Request, res: Response) =>
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', 'attachment; filename=bulten_aboneleri.csv');
   res.send(csvRows.join('\n'));
-});
+}));
 
 // 9. SEO Robots & Sitemap
 app.get('/robots.txt', (_req: Request, res: Response) => {
-  const robots = `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\nSitemap: ${publishedData.seo.canonicalUrl || 'https://ismailsemih.com'}/sitemap.xml`;
+  const robots = `User-agent: *\nAllow: /\nDisallow: /admin\nDisallow: /api\nSitemap: ${store.getPublished().seo.canonicalUrl || 'https://ismailsemih.com'}/sitemap.xml`;
   res.type('text/plain').send(robots);
 });
 
 app.get('/sitemap.xml', (_req: Request, res: Response) => {
+  const publishedData = store.getPublished();
   const baseUrl = publishedData.seo.canonicalUrl || 'https://ismailsemih.com';
   const urls = [
     '/',
@@ -1013,7 +811,26 @@ app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
   return next(err);
 });
 
+// Anything else (e.g. a database error inside an async handler): never leak details to the client.
+app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  console.error('İstek hatası:', err?.code || err?.name || 'bilinmeyen');
+  if (res.headersSent) return;
+  res.status(500).json({ error: 'Sunucu hatası. Lütfen daha sonra tekrar deneyiniz.' });
+});
+
 async function startServer() {
+  try {
+    await pingDb(pool);
+    const applied = await runMigrations(pool);
+    if (applied.length) console.log(`Veritabanı migration uygulandı: ${applied.join(', ')}`);
+    await store.initStore(pool);
+  } catch (err: any) {
+    console.error('Veritabanına bağlanılamadı veya hazırlanamadı:', err?.code ? describeDbError(err) : (err?.message || 'bilinmeyen hata'));
+    process.exit(1);
+  }
+  await store.purgeExpiredSessions().catch(() => undefined);
+  setInterval(() => { store.purgeExpiredSessions().catch(() => undefined); }, 60 * 60 * 1000).unref();
+
   if (!IS_PROD) {
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
