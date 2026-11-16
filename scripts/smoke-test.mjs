@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import 'dotenv/config';
 import crypto from 'node:crypto';
 import mysql from 'mysql2/promise';
+import sharp from 'sharp';
 
 // Gerçek veritabanına ASLA dokunulmaz: DATABASE_URL'deki ad + "_smoke_test" geçici veritabanı oluşturulur ve sonunda silinir.
 if (!process.env.DATABASE_URL) {
@@ -39,6 +40,9 @@ try {
 const testDb = await mysql.createConnection({ ...dbConfig, database: testDbName, charset: 'utf8mb4', timezone: 'Z' });
 
 const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ismail-smoke-'));
+const tmpDir = path.join(isolatedRoot, 'tmp');
+fs.mkdirSync(tmpDir);
+const noR2Env = { R2_ACCOUNT_ID: '', R2_ACCESS_KEY_ID: '', R2_SECRET_ACCESS_KEY: '', R2_BUCKET: '', MEDIA_STORAGE: '', MEDIA_BASE_URL: '' };
 const port = 36181;
 const base = `http://127.0.0.1:${port}`;
 const testUsername = 'ismailsemih';
@@ -48,11 +52,39 @@ let logs = '';
 function launch() {
   server = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
     env: { ...process.env, PORT: String(port), NODE_ENV: 'production', TRUST_PROXY: '1', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
-      DATABASE_URL: testUrl.href, STUDIO_UPLOADS_DIR: path.join(isolatedRoot, 'uploads') },
+      DATABASE_URL: testUrl.href, TMPDIR: tmpDir, TEMP: tmpDir, TMP: tmpDir, ...noR2Env },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   server.stdout.on('data', d => { logs += String(d); });
   server.stderr.on('data', d => { logs += String(d); });
+}
+// Second server (not production) with the in-memory media store; shares the temporary database and sessions.
+const mediaPort = 36182;
+const mediaCdn = 'https://cdn.smoke.test';
+let mediaServer;
+function launchMedia() {
+  mediaServer = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
+    env: { ...process.env, PORT: String(mediaPort), NODE_ENV: 'test', TRUST_PROXY: '1', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
+      DATABASE_URL: testUrl.href, TMPDIR: tmpDir, TEMP: tmpDir, TMP: tmpDir, ...noR2Env, MEDIA_STORAGE: 'memory', MEDIA_BASE_URL: mediaCdn },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  mediaServer.stdout.on('data', d => { logs += String(d); });
+  mediaServer.stderr.on('data', d => { logs += String(d); });
+}
+const mediaRequest = (p, options = {}) => fetch(`http://127.0.0.1:${mediaPort}` + p, options);
+async function stopMedia() {
+  if (!mediaServer || mediaServer.exitCode !== null) return;
+  const exited = new Promise(resolve => mediaServer.once('exit', resolve));
+  mediaServer.kill('SIGTERM');
+  await exited;
+}
+async function waitMedia() {
+  for (let i = 0; i < 120; i++) {
+    if (mediaServer.exitCode !== null) throw new Error('Media server exited early: ' + logs);
+    try { if ((await mediaRequest('/api/health')).ok) return; } catch {}
+    await delay(250);
+  }
+  throw new Error('Media server failed to start: ' + logs);
 }
 async function stop() {
   if (!server || server.exitCode !== null) return;
@@ -254,21 +286,85 @@ try {
   assert.equal(exported.status, 200);
   assert.ok((await exported.json()).data?.settings, 'Server export contains site data');
 
-  const uploadData = new FormData();
-  const tinyPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/6DkAAAAASUVORK5CYII=', 'base64');
-  uploadData.append('file', new Blob([tinyPng], { type: 'image/png' }), 'smoke-test.png');
-  const uploaded = await request('/api/media/upload', { method:'POST', headers:{ cookie }, body:uploadData });
-  assert.equal(uploaded.status, 200, 'Admin can upload a picture');
-  const uploadJson = await uploaded.json();
-  assert.ok(uploadJson.file.url.startsWith('/uploads/'));
-  const loadedImage = await request(uploadJson.file.url);
-  assert.equal(loadedImage.status, 200, 'Uploaded image is publicly retrievable');
-  const svgUpload = new FormData();
-  svgUpload.append('file', new Blob(['<svg xmlns="http://www.w3.org/2000/svg"><script>console.log(1)</script></svg>'], {type:'image/svg+xml'}), 'danger.svg');
-  const svgResponse = await request('/api/media/upload', { method:'POST', headers:{cookie}, body:svgUpload });
-  assert.ok(svgResponse.status >= 400, 'SVG script files should never be accepted');
-  const badUpload = await request('/api/media/upload', { method:'POST', body:uploadData });
-  assert.equal(badUpload.status, 401, 'Public users cannot upload media');
+  launchMedia();
+  await waitMedia();
+  // --- Stage 6: media (R2 is never contacted: the production server has no R2 settings, the test server uses the in-memory store) ---
+  const png = (w, h, extra = {}) => sharp({ create: { width: w, height: h, channels: 3, background: '#ff5a1f' } }).png(extra).toBuffer();
+  const formWith = (buffer, name, type) => { const f = new FormData(); f.append('file', new Blob([buffer], { type }), name); return f; };
+  const tinyPng = await png(8, 8);
+
+  assert.equal((await request('/api/media/upload', { method: 'POST', body: formWith(tinyPng, 'a.png', 'image/png') })).status, 401, 'Anonymous upload is refused (production server)');
+  const noR2 = await request('/api/media/upload', { method: 'POST', headers: { cookie }, body: formWith(tinyPng, 'a.png', 'image/png') });
+  assert.equal(noR2.status, 503, 'Upload answers 503 when R2 is not configured');
+  assert.match((await noR2.json()).error, /Medya depolama yapılandırılmamış/);
+  assert.equal((await request('/api/health')).status, 200, 'Health is unaffected by missing R2 settings');
+
+  // The memory-store switch is refused in production.
+  const prodMemory = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
+    env: { ...process.env, PORT: '36183', NODE_ENV: 'production', MEDIA_STORAGE: 'memory', DATABASE_URL: testUrl.href }, stdio: 'ignore',
+  });
+  const prodMemoryExit = await new Promise((resolve) => prodMemory.once('exit', resolve));
+  assert.equal(prodMemoryExit, 1, 'MEDIA_STORAGE=memory is rejected when NODE_ENV=production');
+
+  const mediaUp = (buffer, name, type, headers = { cookie }) => mediaRequest('/api/media/upload', { method: 'POST', headers, body: formWith(buffer, name, type) });
+  assert.equal((await mediaUp(tinyPng, 'a.png', 'image/png', {})).status, 401, 'Anonymous upload is refused');
+
+  const okUpload = await mediaUp(tinyPng, 'Smoke Test.png', 'image/png');
+  assert.equal(okUpload.status, 200, 'Admin can upload a picture');
+  const okJson = await okUpload.json();
+  assert.equal(okJson.success, true);
+  assert.ok(okJson.file.url.startsWith(mediaCdn + '/media/'), 'URL starts with MEDIA_BASE_URL');
+  assert.ok(okJson.file.url.endsWith('.webp'), 'Images are converted to WebP');
+  assert.equal(okJson.file.mimetype, 'image/webp');
+  assert.equal(okJson.file.originalName, 'Smoke Test.png');
+  assert.match(okJson.file.url, /\/media\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.webp$/);
+  const mediaList = (await (await mediaRequest('/api/media/list', { headers: { cookie } })).json()).media;
+  assert.ok(mediaList.some((m) => m.url === okJson.file.url && m.filename === okJson.file.filename), 'Upload is listed');
+  const [[mediaRow]] = await testDb.query('SELECT kind, mime, width, height FROM media WHERE url = ?', [okJson.file.url]);
+  assert.deepEqual([mediaRow.kind, mediaRow.mime, mediaRow.width, mediaRow.height], ['image', 'image/webp', 8, 8]);
+
+  // Large images are downscaled to 2560 px (never upscaled).
+  const big = await (await mediaUp(await png(3000, 1500), 'big.png', 'image/png')).json();
+  const [[bigRow]] = await testDb.query('SELECT width, height FROM media WHERE url = ?', [big.file.url]);
+  assert.deepEqual([bigRow.width, bigRow.height], [2560, 1280]);
+
+  // Videos are stored as-is (MP4 signature).
+  const mp4 = Buffer.concat([Buffer.from([0, 0, 0, 24]), Buffer.from('ftypisom'), Buffer.alloc(40)]);
+  const videoUpload = await mediaUp(mp4, 'clip.mp4', 'video/mp4');
+  assert.equal(videoUpload.status, 200);
+  const videoJson = await videoUpload.json();
+  assert.ok(videoJson.file.url.endsWith('.mp4') && videoJson.file.size === mp4.length && videoJson.file.mimetype === 'video/mp4');
+
+  // Validation by file signature, never by extension or Content-Type.
+  for (const [name, type, content] of [
+    ['fake.jpg', 'image/jpeg', Buffer.from('Bu bir metin dosyasıdır, görsel değil. '.repeat(5))],
+    ['fake.png', 'image/png', Buffer.from('<?php echo 1; ?>' + ' '.repeat(40))],
+    ['danger.svg', 'image/svg+xml', Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>console.log(1)</script></svg>')],
+    ['empty.png', 'image/png', Buffer.alloc(0)],
+    ['tiny.webm', 'video/webm', Buffer.from('not really webm at all')],
+    ['pic.exe', 'application/octet-stream', Buffer.from('MZ' + 'x'.repeat(50))],
+  ]) {
+    const r = await mediaUp(content, name, type);
+    assert.equal(r.status, 400, name + ' must be rejected');
+    assert.match((await r.json()).error, /[A-Za-zİıÖöÜüÇçĞğŞş]/);
+  }
+  const brokenPng = Buffer.concat([tinyPng.subarray(0, 40), Buffer.alloc(60, 7)]);
+  assert.equal((await mediaUp(brokenPng, 'broken.png', 'image/png')).status, 400, 'A corrupt image with a valid signature is rejected');
+
+  const huge = Buffer.concat([tinyPng.subarray(0, 8), Buffer.alloc(31 * 1024 * 1024)]);
+  assert.equal((await mediaUp(huge, 'huge.png', 'image/png')).status, 413, 'Files above 30 MB are rejected');
+
+  assert.equal((await mediaRequest('/api/media/delete', { method: 'DELETE', headers: { cookie, ...json }, body: JSON.stringify({ filename: okJson.file.filename }) })).status, 200, 'Upload can be deleted');
+  assert.equal((await mediaRequest('/api/media/delete', { method: 'DELETE', headers: { cookie, ...json }, body: JSON.stringify({ filename: okJson.file.filename }) })).status, 404);
+  assert.equal((await mediaRequest('/api/media/delete', { method: 'DELETE', headers: { cookie, ...json }, body: JSON.stringify({ filename: '../../etc/passwd' }) })).status, 404);
+  const listAfter = (await (await mediaRequest('/api/media/list', { headers: { cookie } })).json()).media;
+  assert.equal(listAfter.some((m) => m.filename === okJson.file.filename), false);
+  assert.equal((await mediaRequest('/api/media/list')).status, 401);
+
+  // The old disk-based upload folder is gone and nothing was written to disk (temp dir stays empty).
+  assert.equal((await request('/uploads/anything.png')).status === 200 && (await request('/uploads/anything.png')).headers.get('content-type')?.startsWith('image'), false, '/uploads is no longer served');
+  assert.deepEqual(fs.readdirSync(tmpDir).filter((n) => !n.startsWith('tsx-')), [], 'No temporary files are written by uploads (tsx runtime folder aside)');
+  assert.equal(fs.existsSync(path.resolve('public/uploads')) && fs.readdirSync(path.resolve('public/uploads')).length > 0, false, 'public/uploads stays empty');
 
   // --- Stage 4: hidden content, validation, rate limits, limits, headers, CSV ---
   const draftNow = (await (await request('/api/site/draft', { headers: { cookie } })).json()).data;
@@ -431,11 +527,12 @@ try {
   const [[afterLogout]] = await testDb.query('SELECT COUNT(*) AS n FROM admin_sessions WHERE token_hash = ?', [sha(sessionToken)]);
   assert.equal(Number(afterLogout.n), 0, 'Logout deletes the session row');
 
-  process.stdout.write('PASS: MySQL (health, hashed sessions, restart persistence, 20-version cap), public data, login/logout, cookie auth, secret isolation, URL preview permission, removed AI endpoints, _en cleanup, hidden-content filter, form validation, rate limits, body limits, security headers, CSV escaping, SSRF list.\n');
+  process.stdout.write('PASS: media (signature check, WebP, limits, 503 without R2), MySQL (health, hashed sessions, restart persistence, 20-version cap), public data, login/logout, cookie auth, secret isolation, URL preview permission, removed AI endpoints, _en cleanup, hidden-content filter, form validation, rate limits, body limits, security headers, CSV escaping, SSRF list.\n');
 } catch (error) {
   process.stderr.write('SMOKE TEST FAILED: ' + error.stack + '\n' + logs.slice(-1800) + '\n');
   process.exitCode = 1;
 } finally {
+  await stopMedia().catch(() => {});
   await stop().catch(() => {});
   try { await testDb.end(); } catch {}
   try { await adminConn.query('DROP DATABASE IF EXISTS `' + testDbName + '`'); } catch {}

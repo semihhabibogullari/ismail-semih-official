@@ -31,4 +31,5 @@ jobs:
       - run: npm run lint
       - run: npm run build
       - run: node --import tsx scripts/test-section-appearance.mjs
+      - run: node --import tsx scripts/test-media.mjs
       - run: node scripts/smoke-test.mjs

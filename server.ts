@@ -5,9 +5,7 @@
 
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
-import fs from 'fs';
 import cookieParser from 'cookie-parser';
-import multer from 'multer';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
@@ -15,6 +13,8 @@ import { initialSiteData } from './src/data/initialData';
 import { SiteData } from './src/types';
 import { createPool, describeDbError, pingDb, runMigrations } from './server/db';
 import * as store from './server/store';
+import { createMediaService, createMemoryStorage, createUploadLimiter, MEDIA_NOT_CONFIGURED, MediaError, MediaService, parseUpload } from './server/media';
+import { createR2Storage, missingR2Env } from './server/r2';
 import { migrateSiteData } from './server/store';
 
 dotenv.config();
@@ -52,9 +52,14 @@ function configuredMediaOrigin(): string | null {
 }
 const MEDIA_ORIGIN = configuredMediaOrigin();
 
-// Directories (only the uploads folder is left on disk; Stage 6 moves media to R2)
-const UPLOADS_DIR = process.env.STUDIO_UPLOADS_DIR ? path.resolve(process.env.STUDIO_UPLOADS_DIR) : path.resolve(__dirname, 'public/uploads');
-if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+// Media storage: Cloudflare R2 (see server/r2.ts). Nothing is ever written to the server disk.
+// MEDIA_STORAGE=memory swaps in a fake in-memory store for automated tests only.
+const MEDIA_MEMORY_MODE = process.env.MEDIA_STORAGE === 'memory';
+if (MEDIA_MEMORY_MODE && IS_PROD) {
+  console.error('MEDIA_STORAGE=memory yalnızca testler içindir ve NODE_ENV=production iken kullanılamaz.');
+  process.exit(1);
+}
+let mediaService: MediaService | null = null;
 
 // Authentication: the single admin account comes from ADMIN_USERNAME / ADMIN_PASSWORD (.env).
 // A scrypt digest of the password is generated in memory at startup; the plain value is never stored.
@@ -117,7 +122,7 @@ const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com" + mediaSource,
+  "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: https:" + mediaSource,
   "media-src 'self' https:" + mediaSource,
   "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://open.spotify.com https://www.instagram.com",
@@ -144,10 +149,6 @@ app.use('/api', ah(async (req: Request, res: Response, next: NextFunction) => {
   if (!(await sessionToken(req))) return res.status(401).json({ error: 'Yetkisiz erişim. Lütfen giriş yapınız.' });
   return adminJson(req, res, next);
 }));
-app.use('/uploads', express.static(UPLOADS_DIR, {
-  setHeaders: (res) => { res.setHeader('X-Content-Type-Options', 'nosniff'); },
-}));
-
 // Reject cross-origin state changes made with browser cookies (CSRF defense).
 app.use('/api', (req: Request, res: Response, next: NextFunction) => {
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
@@ -217,32 +218,6 @@ const requireAuth = ah(async (req: Request, res: Response, next: NextFunction) =
     return res.status(401).json({ error: 'Yetkisiz erişim. Lütfen giriş yapınız.' });
   }
   next();
-});
-
-// Multer Upload configuration
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    cb(null, UPLOADS_DIR);
-  },
-  filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const cleanName = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9_-]/g, '_');
-    cb(null, `${cleanName}_${Date.now()}${ext}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  limits: { fileSize: 30 * 1024 * 1024 }, // 30 MB
-  fileFilter: (_req, file, cb) => {
-    const allowed = /\.(jpg|jpeg|png|gif|svg|webp|avif|mp4|webm|mp3|wav|pdf|woff2|woff)$/i;
-    // SVG is excluded: active SVG documents can execute scripts on this origin.
-    if (file.originalname.match(allowed) && !/\.svg$/i.test(file.originalname)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Desteklenmeyen dosya türü.'));
-    }
-  },
 });
 
 // --- API ROUTES ---
@@ -622,59 +597,44 @@ app.post('/api/instagram/config', requireAuth, ah(async (req: Request, res: Resp
   res.json({ success: true, settings: draftData.settings.instagramSettings, message: 'Instagram ayarları güncellendi.' });
 }));
 
-// 7. Media Library & Upload
-app.post('/api/media/upload', requireAuth, upload.single('file'), (req: Request, res: Response) => {
+// 7. Media Library & Upload (files live in R2, records in the `media` table)
+const uploadRateLimit = createUploadLimiter();
+const requireMedia = (_req: Request, res: Response, next: NextFunction) => {
+  if (!mediaService) return res.status(503).json({ error: MEDIA_NOT_CONFIGURED });
+  next();
+};
+
+app.post('/api/media/upload', requireAuth, requireMedia, uploadRateLimit, parseUpload, ah(async (req: Request, res: Response) => {
   if (!req.file) {
     return res.status(400).json({ error: 'Dosya yüklenemedi.' });
   }
-
-  const fileUrl = `/uploads/${req.file.filename}`;
-  return res.json({
-    success: true,
-    file: {
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      size: req.file.size,
-      mimetype: req.file.mimetype,
-      url: fileUrl,
-      uploadedAt: new Date().toISOString(),
-    },
-    message: 'Dosya başarıyla yüklendi.',
-  });
-});
-
-app.get('/api/media/list', requireAuth, (_req: Request, res: Response) => {
   try {
-    const files = fs.readdirSync(UPLOADS_DIR);
-    const mediaList = files.map((filename) => {
-      const stats = fs.statSync(path.resolve(UPLOADS_DIR, filename));
-      return {
-        filename,
-        url: `/uploads/${filename}`,
-        size: stats.size,
-        createdAt: stats.birthtime.toISOString(),
-      };
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    res.json({ media: mediaList });
+    const file = await mediaService!.upload({ buffer: req.file.buffer, originalname: req.file.originalname });
+    return res.json({ success: true, file, message: 'Dosya başarıyla yüklendi.' });
   } catch (err) {
+    if (err instanceof MediaError) return res.status(err.status).json({ error: err.message });
+    throw err;
+  }
+}));
+
+app.get('/api/media/list', requireAuth, requireMedia, ah(async (_req: Request, res: Response) => {
+  try {
+    res.json({ media: await mediaService!.list() });
+  } catch {
     res.status(500).json({ error: 'Medya kütüphanesi okunamadı.' });
   }
-});
+}));
 
-app.delete('/api/media/delete', requireAuth, (req: Request, res: Response) => {
-  const { filename } = req.body;
-  if (!filename) return res.status(400).json({ error: 'Dosya adı belirtilmedi.' });
-
-  const safeFilename = path.basename(filename);
-  const target = path.resolve(UPLOADS_DIR, safeFilename);
-
-  if (fs.existsSync(target)) {
-    fs.unlinkSync(target);
-    return res.json({ success: true, message: 'Dosya silindi.' });
+app.delete('/api/media/delete', requireAuth, requireMedia, ah(async (req: Request, res: Response) => {
+  const filename = req.body?.filename;
+  if (!filename || typeof filename !== 'string') return res.status(400).json({ error: 'Dosya adı belirtilmedi.' });
+  try {
+    if (await mediaService!.remove(filename)) return res.json({ success: true, message: 'Dosya silindi.' });
+  } catch {
+    return res.status(500).json({ error: 'Dosya silinemedi.' });
   }
   return res.status(404).json({ error: 'Dosya bulunamadı.' });
-});
+}));
 
 // 8. Contact & Newsletter
 app.post('/api/contact', contactRateLimit, ah(async (req: Request, res: Response) => {
@@ -827,6 +787,18 @@ async function startServer() {
   } catch (err: any) {
     console.error('Veritabanına bağlanılamadı veya hazırlanamadı:', err?.code ? describeDbError(err) : (err?.message || 'bilinmeyen hata'));
     process.exit(1);
+  }
+  if (MEDIA_MEMORY_MODE) {
+    mediaService = createMediaService({ pool, storage: createMemoryStorage(), baseUrl: process.env.MEDIA_BASE_URL?.trim() || `http://localhost:${PORT}` });
+    console.warn('MEDIA_STORAGE=memory: sahte bellek deposu kullanılıyor (yalnızca test).');
+  } else {
+    const missing = missingR2Env();
+    if (!missing.length && !MEDIA_ORIGIN) missing.push('MEDIA_BASE_URL (geçerli bir adres değil)');
+    if (missing.length) {
+      console.warn(`Medya depolama yapılandırılmamış, yükleme kapalı. Eksik değişkenler: ${missing.join(', ')}`);
+    } else {
+      mediaService = createMediaService({ pool, storage: createR2Storage(), baseUrl: process.env.MEDIA_BASE_URL!.trim() });
+    }
   }
   await store.purgeExpiredSessions().catch(() => undefined);
   setInterval(() => { store.purgeExpiredSessions().catch(() => undefined); }, 60 * 60 * 1000).unref();

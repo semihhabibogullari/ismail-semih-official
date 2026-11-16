@@ -38,6 +38,8 @@ CREATE DATABASE veritabani CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 - `npm run lint` — tür denetimi
 - `node --import tsx scripts/test-section-appearance.mjs`
+- `node --import tsx scripts/test-media.mjs` — medya hizmeti birim testi (sahte depo, gerçek R2'ye bağlanmaz)
+- `npm run r2:check` — gerçek R2 doğrulaması (R2 değişkenleri gerekir)
 - `node scripts/smoke-test.mjs` — önce `npm run build` gerekir. `DATABASE_URL` içindeki veritabanı adına `_smoke_test` ekleyerek kendi geçici veritabanını oluşturur ve sonunda siler (gerçek veritabanına dokunmaz; kullanıcının CREATE/DROP DATABASE yetkisi gerekir).
 
 ## Yönetim paneli
@@ -45,9 +47,24 @@ CREATE DATABASE veritabani CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 - Giriş: `/admin/login`. Şifre yalnızca `ADMIN_PASSWORD` ortam değişkeninden gelir.
 - Değişiklikler önce taslağa kaydedilir, "Yayınla" ile canlıya alınır.
 
+## Cloudflare R2 kurulumu (medya)
+
+Panelden yüklenen tüm görsel ve videolar Cloudflare R2'de saklanır; sunucu diskine hiçbir şey yazılmaz. Kayıtlar `media` tablosundadır.
+
+1. Cloudflare panelinde **R2 → Create bucket** ile bir bucket oluşturun (`R2_BUCKET`). Hesap kimliği (`R2_ACCOUNT_ID`) R2 sayfasının sağ tarafında görünür.
+2. **R2 → Manage API Tokens → Create API token**: yetki **Object Read & Write**, kapsam **yalnızca bu bucket**. Çıkan *Access Key ID* ve *Secret Access Key* değerlerini `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` olarak `.env`'e yazın (yalnızca bir kez gösterilir, commit etmeyin).
+3. Bucket → **Settings → Custom Domains → Connect Domain** ile alan adınızı (örn. `cdn.alanadin.com`) bağlayın ve `MEDIA_BASE_URL=https://cdn.alanadin.com` yazın (sonda `/` olmadan). `r2.dev` açık adresi üretimde önerilmez.
+4. `npm run r2:check` — gerçek R2'ye küçük bir test görseli yükler, `MEDIA_BASE_URL` üzerinden HTTP 200 ve `Cache-Control` başlığını doğrular, sonra siler.
+
+Yükleme kuralları: oturum zorunlu, en fazla 30 MB, oturum başına 10 dakikada 60 yükleme. Dosya türü uzantıya/Content-Type'a değil dosya imzasına göre doğrulanır (JPG, PNG, WebP, GIF, AVIF, MP4, WebM; SVG kabul edilmez). Görseller EXIF yönü düzeltilip meta verileri silinerek, 2560 px'den genişse küçültülerek WebP'ye çevrilir (animasyonlu GIF animasyonlu WebP olur). Videolar olduğu gibi yüklenir. Nesne anahtarı `media/YYYY/AA/<uuid>.<uzantı>`, `Cache-Control: public, max-age=31536000, immutable`.
+
+R2 değişkenleri eksikse sunucu yine açılır (uyarı loglanır), `/api/media/upload` 503 ("Medya depolama yapılandırılmamış") döner. `MEDIA_STORAGE=memory` yalnızca otomatik testler içindir (bellekte sahte depo) ve `NODE_ENV=production` iken sunucu açılmaz.
+
+**sharp (Aşama 8 notu):** görsel işleme `sharp` ile yapılır; `npm ci` Linux x64'te hazır (prebuilt) `@img/sharp-linux-x64` ikilisini indirir, derleme gerekmez (glibc 2.17+ / musl destekli). Plesk'te Node ortamında `npm ci` sonrası `node -e "require('sharp')"` ile yüklendiğini doğrulayın. İkili indirilemiyorsa (kapalı ağ) `npm ci` çıktısındaki `@img/sharp-*` hatasına bakın.
+
 ## Güvenlik ve dağıtım ayarları
 
 - `TRUST_PROXY=1` — Uygulama Plesk/Nginx gibi bir ters vekilin arkasında çalışıyorsa tanımlayın. Hız sınırları ve giriş kilidi `req.ip` kullanır; bu ayar olmadan vekil arkasında tüm ziyaretçiler tek IP gibi görünür. Doğrudan internete açık çalışıyorsa tanımlamayın.
-- `MEDIA_BASE_URL` — Medya ayrı bir alan adından (ör. R2/CDN) sunuluyorsa bu adres İçerik Güvenlik Politikası'nda görsel, ses/video ve yazı tipi kaynağı olarak izin alır.
+- `MEDIA_BASE_URL` — R2 medya alan adı; İçerik Güvenlik Politikası'nda görsel ve video kaynağı olarak izin alır (aşağıya bakın).
 - Üretimde (`NODE_ENV=production`) HSTS ve İçerik Güvenlik Politikası başlıkları gönderilir; geliştirme sunucusunda yalnızca temel başlıklar vardır.
 - İletişim formu IP başına saatte 5, bülten kaydı saatte 10 istekle sınırlıdır (bellek içi, yeniden başlatmada sıfırlanır).
