@@ -30,7 +30,7 @@ export const initialSiteData: SiteData = {
     },
     contactEmail: '',
     contactPhone: '',
-    address: 'Moda & Kadıköy, İstanbul / Türkiye',
+    address: '',
     bioSummary: 'İstanbul çağdaş tiyatro sahnelerinde oyunculuk, reji ve dramaturji çalışmalarını sürdüren; sahne sanatları ile yapay zekâ ve yeni medya pratiklerini harmanlayan sanatçı, yönetmen ve podcast üreticisi.',
     copyrightText: '© 2026 İsmail Semih Habiboğulları. Tüm Hakları Saklıdır.',
     darkTheme: {
