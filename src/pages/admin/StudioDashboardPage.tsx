@@ -99,6 +99,9 @@ const groups: Group[] = [
 ];
 
 const cardClass = 'rounded-2xl border border-white/10 bg-[#15151c] shadow-lg shadow-black/10';
+// Unread-message badge next to the "Mesajlar" title; hidden when there is nothing unread.
+const UnreadBadge=({count}:{count:number|null})=>count?<span className="min-w-5 h-5 px-1.5 rounded-full bg-[#ff5a1f] text-white text-[11px] font-bold leading-5 text-center" aria-label={`${count} okunmamış mesaj`}>{count>99?'99+':count}</span>:null;
+
 const PANEL_META = [
   {key:'general' as Panel,name:'Genel Ayarlar',detail:'Logo, renk, yazı tipi, ölçüler, SEO, iletişim',icon:Settings2},
   {key:'sections' as Panel,name:'Blok Yerleşimi',detail:'Sıralama, görünürlük ve blok boyutları',icon:Layers},
@@ -304,7 +307,7 @@ export const StudioDashboardPage: React.FC = () => {
           {panel&&<button type="button" onClick={()=>{setPanel(null);setEditing(null)}} className="p-2 rounded-xl bg-white/5 hover:bg-white/10" title="Tüm bloklar"><ArrowLeft size={19} /></button>}
           <div className="w-10 h-10 rounded-xl bg-[#ff5a1f] grid place-items-center text-white"><LayoutGrid size={20} /></div>
           <div><p className="text-xs uppercase text-[#ff8c42] tracking-[.18em] font-semibold">İsmail Semih Studio</p>
-            <h1 className="text-base sm:text-xl font-bold">{currentMeta?.name||'Site Yönetim Merkezi'}</h1></div>
+            <h1 className="text-base sm:text-xl font-bold flex items-center gap-2">{currentMeta?.name||'Site Yönetim Merkezi'}{panel==='messages'&&<UnreadBadge count={unread}/>}</h1></div>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={()=>setShowPreview(!showPreview)}
@@ -350,9 +353,8 @@ export const StudioDashboardPage: React.FC = () => {
               className={cardClass+' text-left p-5 min-h-[182px] flex flex-col hover:border-[#ff5a1f]/60 hover:bg-[#1d1b22] focus:outline-none focus:ring-2 focus:ring-[#ff5a1f] transition-all group'}>
               <div className="flex justify-between items-start"><span className="w-12 h-12 rounded-2xl grid place-items-center bg-[#ff5a1f]/10 text-[#ff8c42]"><Icon size={23}/></span>
                 <ArrowRight size={18} className="text-gray-600 group-hover:text-[#ff5a1f]"/></div>
-              <h3 className="mt-5 font-bold text-lg">{p.name}</h3><p className="text-xs text-gray-400 mt-1">{p.detail}</p>
+              <h3 className="mt-5 font-bold text-lg flex items-center gap-2">{p.name}{p.key==='messages'&&<UnreadBadge count={unread}/>}</h3><p className="text-xs text-gray-400 mt-1">{p.detail}</p>
               {count!==undefined&&<p className="mt-3 text-[11px] text-[#ff8c42]">{count} içerik</p>}
-              {p.key==='messages'&&unread!==null&&<p className="mt-3 text-[11px] text-[#ff8c42]">{unread} okunmamış</p>}
             </button>})}
         </div>
       </>:null}

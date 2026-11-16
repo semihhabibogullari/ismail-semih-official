@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { Mail, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { useTurnstile, TURNSTILE_CONTAINER_CLASS } from '../common/Turnstile';
 
 export const NewsletterSection: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -12,6 +13,7 @@ export const NewsletterSection: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const turnstile = useTurnstile();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +35,7 @@ export const NewsletterSection: React.FC = () => {
       const res = await fetch('/api/newsletter/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, consent }),
+        body: JSON.stringify({ email, consent, ...(await turnstile.botFields()) }),
       });
       const json = await res.json();
       if (res.ok && json.success) {
@@ -47,6 +49,7 @@ export const NewsletterSection: React.FC = () => {
       setErrorMessage('Bağlantı hatası. Lütfen daha sonra tekrar deneyiniz.');
     } finally {
       setIsLoading(false);
+      turnstile.reset();
     }
   };
 
@@ -73,6 +76,7 @@ export const NewsletterSection: React.FC = () => {
             </p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              <input {...turnstile.honeypotProps} />
               <div className="flex flex-col sm:flex-row gap-3">
                 <input
                   type="email"
@@ -113,6 +117,8 @@ export const NewsletterSection: React.FC = () => {
                   etkinlik duyuruları için işlenmesini kabul ediyorum.
                 </label>
               </div>
+
+              <div ref={turnstile.containerRef} className={TURNSTILE_CONTAINER_CLASS} />
 
               {/* Status feedback */}
               {successMessage && (

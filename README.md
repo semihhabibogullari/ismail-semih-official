@@ -62,6 +62,34 @@ R2 değişkenleri eksikse sunucu yine açılır (uyarı loglanır), `/api/media/
 
 **sharp (Aşama 8 notu):** görsel işleme `sharp` ile yapılır; `npm ci` Linux x64'te hazır (prebuilt) `@img/sharp-linux-x64` ikilisini indirir, derleme gerekmez (glibc 2.17+ / musl destekli). Plesk'te Node ortamında `npm ci` sonrası `node -e "require('sharp')"` ile yüklendiğini doğrulayın. İkili indirilemiyorsa (kapalı ağ) `npm ci` çıktısındaki `@img/sharp-*` hatasına bakın.
 
+## Cloudflare Turnstile kurulumu (bot koruması)
+
+İletişim formu (`POST /api/contact`) ve bülten kaydı (`POST /api/newsletter/subscribe`) Cloudflare Turnstile ile korunur. Ek olarak gizli bir tuzak alanı (dolu gelirse mesaj sessizce atılır) ve en az 2 saniyelik doldurma süresi kontrolü vardır.
+
+1. Cloudflare panelinde **Turnstile → Add widget**. *Widget mode*: **Managed**; *Hostname management* bölümüne sitenin alan adını (örn. `alanadin.com`) ekleyin. Geliştirme için `localhost` da ekleyebilirsiniz.
+2. Oluşan **Site Key** ve **Secret Key** değerlerini `.env`'e yazın (Secret Key'i commit etmeyin):
+   ```
+   TURNSTILE_SITE_KEY="..."
+   TURNSTILE_SECRET_KEY="..."
+   ```
+3. Sunucuyu yeniden başlatın. Site Key tarayıcıya `GET /api/config` ile verilir; Secret Key yalnızca sunucuda kalır ve her gönderimde `siteverify` ile doğrulama için kullanılır (5 sn zaman aşımı).
+
+Davranış:
+- **Production** (`NODE_ENV=production`) `TURNSTILE_SECRET_KEY` olmadan iki uç da 503 ("Form geçici olarak kullanılamıyor") döner ve açılışta uyarı loglanır.
+- **Geliştirme**'de anahtarlar tanımlı değilse Turnstile doğrulaması atlanır (tuzak alanı ve 2 sn kontrolü yine çalışır).
+- Doğrulama başarısızsa 400, Cloudflare'a ulaşılamazsa 503 döner; mesaj ve abonelik kaydedilmez.
+- Form tarafında kutu `interaction-only` modundadır: ziyaretçi yalnızca Cloudflare ek doğrulama isterse bir şey görür.
+
+**Geliştirmede test anahtarları** (Cloudflare'ın resmî test çiftleri; gerçek doğrulama yapmaz):
+
+| Amaç | Site Key | Secret Key |
+| --- | --- | --- |
+| Her zaman geçer | `1x00000000000000000000AA` | `1x0000000000000000000000000000000AA` |
+| Her zaman reddeder | `2x00000000000000000000AB` | `2x0000000000000000000000000000000AA` |
+| Token'ı "zaten kullanıldı" diye reddeder | `3x00000000000000000000FF` | `3x0000000000000000000000000000000AA` |
+
+Test anahtarlarını yalnızca geliştirmede kullanın; production'da gerçek anahtar çifti gerekir. `TURNSTILE_TEST_VERIFIER=1` yalnızca otomatik testler içindir (sahte doğrulayıcı) ve `NODE_ENV=production` iken sunucu açılmaz.
+
 ## Güvenlik ve dağıtım ayarları
 
 - `TRUST_PROXY=1` — Uygulama Plesk/Nginx gibi bir ters vekilin arkasında çalışıyorsa tanımlayın. Hız sınırları ve giriş kilidi `req.ip` kullanır; bu ayar olmadan vekil arkasında tüm ziyaretçiler tek IP gibi görünür. Doğrudan internete açık çalışıyorsa tanımlamayın.

@@ -65,13 +65,16 @@ let mediaServer;
 function launchMedia() {
   mediaServer = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
     env: { ...process.env, PORT: String(mediaPort), NODE_ENV: 'test', TRUST_PROXY: '1', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
-      DATABASE_URL: testUrl.href, TMPDIR: tmpDir, TEMP: tmpDir, TMP: tmpDir, ...noR2Env, MEDIA_STORAGE: 'memory', MEDIA_BASE_URL: mediaCdn },
+      DATABASE_URL: testUrl.href, TMPDIR: tmpDir, TEMP: tmpDir, TMP: tmpDir, ...noR2Env, MEDIA_STORAGE: 'memory', MEDIA_BASE_URL: mediaCdn,
+      TURNSTILE_TEST_VERIFIER: '1', TURNSTILE_SECRET_KEY: '', TURNSTILE_SITE_KEY: '' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   mediaServer.stdout.on('data', d => { logs += String(d); });
   mediaServer.stderr.on('data', d => { logs += String(d); });
 }
 const mediaRequest = (p, options = {}) => fetch(`http://127.0.0.1:${mediaPort}` + p, options);
+// Bot-protection fields a real browser would send (the test server verifies tokens with a fake verifier, never Cloudflare).
+const botOk = () => ({ turnstileToken: 'test-valid-token', formElapsedMs: 5000, website: '' });
 async function stopMedia() {
   if (!mediaServer || mediaServer.exitCode !== null) return;
   const exited = new Promise(resolve => mediaServer.once('exit', resolve));
@@ -109,6 +112,8 @@ const check = async () => {
 
 try {
   await check();
+  launchMedia();
+  await waitMedia();
   const publicData = await request('/api/site');
   assert.equal(publicData.status, 200);
   const publicJson = await publicData.json();
@@ -235,9 +240,9 @@ try {
   assert.equal(aboutDraft.status, 200);
   assert.equal((await aboutDraft.json()).data.about.heading, 'Smoke Hakkımda Başlığı');
 
-  const sentMessage = await request('/api/contact', {
+  const sentMessage = await mediaRequest('/api/contact', {
     method: 'POST', headers: json,
-    body: JSON.stringify({ name: 'Smoke Test', email: 'smoke@example.com', subject: 'Test', message: 'Merhaba' }),
+    body: JSON.stringify({ name: 'Smoke Test', email: 'smoke@example.com', subject: 'Test', message: 'Merhaba', ...botOk() }),
   });
   assert.equal(sentMessage.status, 200);
   const messages = (await (await request('/api/contact/list', { headers: { cookie } })).json()).messages;
@@ -250,8 +255,8 @@ try {
   const afterDelete = (await (await request('/api/contact/list', { headers: { cookie } })).json()).messages;
   assert.equal(afterDelete.some((m) => m.id === message.id), false, 'Message can be deleted');
 
-  const subscribed = await request('/api/newsletter/subscribe', {
-    method: 'POST', headers: json, body: JSON.stringify({ email: 'smoke-sub@example.com', consent: true }),
+  const subscribed = await mediaRequest('/api/newsletter/subscribe', {
+    method: 'POST', headers: json, body: JSON.stringify({ email: 'smoke-sub@example.com', consent: true, ...botOk() }),
   });
   assert.equal(subscribed.status, 200);
   const subs = (await (await request('/api/newsletter/list', { headers: { cookie } })).json()).subscribers;
@@ -264,6 +269,63 @@ try {
   assert.equal(removed.status, 200);
   const subsAfter = (await (await request('/api/newsletter/list', { headers: { cookie } })).json()).subscribers;
   assert.equal(subsAfter.some((s) => s.id === sub.id), false, 'Subscriber can be deleted');
+
+  // --- Bot protection: honeypot, minimum fill time, Turnstile (fake verifier on the non-production server) ---
+  const listMessages = async () => (await (await request('/api/contact/list', { headers: { cookie } })).json()).messages;
+  const listSubscribers = async () => (await (await request('/api/newsletter/list', { headers: { cookie } })).json()).subscribers;
+  const botContact = { name: 'Bot Test', email: 'bot-test@example.com', subject: 'Bot', message: 'Merhaba' };
+  const botPost = (url, ip, body) => mediaRequest(url, { method: 'POST', headers: { ...json, 'x-forwarded-for': ip }, body: JSON.stringify(body) });
+  const noToken = await botPost('/api/contact', '10.6.0.1', { ...botContact, formElapsedMs: 5000 });
+  assert.equal(noToken.status, 400, 'Missing Turnstile token is rejected');
+  assert.match((await noToken.json()).error, /Robot doğrulaması başarısız/);
+  const badToken = await botPost('/api/contact', '10.6.0.2', { ...botContact, formElapsedMs: 5000, turnstileToken: 'wrong-token' });
+  assert.equal(badToken.status, 400, 'Invalid Turnstile token is rejected');
+  assert.match((await badToken.json()).error, /Robot doğrulaması başarısız/);
+  const tooFast = await botPost('/api/contact', '10.6.0.3', { ...botContact, formElapsedMs: 300, turnstileToken: 'test-valid-token' });
+  assert.equal(tooFast.status, 400, 'A form submitted within 2 seconds is rejected');
+  assert.equal((await botPost('/api/contact', '10.6.0.4', { ...botContact, turnstileToken: 'test-valid-token' })).status, 400, 'Missing fill time is rejected');
+  const unavailable = await botPost('/api/contact', '10.6.0.5', { ...botContact, formElapsedMs: 5000, turnstileToken: 'test-unavailable' });
+  assert.equal(unavailable.status, 503, 'Unreachable verifier is a 503, never a success');
+  assert.equal((await botPost('/api/newsletter/subscribe', '10.6.1.1', { email: 'bot-sub@example.com', consent: true, formElapsedMs: 5000 })).status, 400);
+  assert.equal((await botPost('/api/newsletter/subscribe', '10.6.1.2', { email: 'bot-sub@example.com', consent: true, formElapsedMs: 5000, turnstileToken: 'wrong-token' })).status, 400);
+  assert.equal((await botPost('/api/newsletter/subscribe', '10.6.1.3', { email: 'bot-sub@example.com', consent: true, formElapsedMs: 100, turnstileToken: 'test-valid-token' })).status, 400);
+  assert.equal((await listMessages()).some((m) => m.email === 'bot-test@example.com'), false, 'Rejected contact attempts store nothing');
+  assert.equal((await listSubscribers()).some((x) => x.email === 'bot-sub@example.com'), false, 'Rejected subscriptions store nothing');
+  const okContact = await botPost('/api/contact', '10.6.0.6', { ...botContact, formElapsedMs: 5000, turnstileToken: 'test-valid-token' });
+  assert.equal(okContact.status, 200, 'Valid token succeeds');
+  assert.ok((await listMessages()).some((m) => m.email === 'bot-test@example.com'), 'Valid contact is stored');
+  const honeyContact = await botPost('/api/contact', '10.6.0.7', { ...botContact, email: 'honey@example.com', website: 'http://spam.example', formElapsedMs: 5000, turnstileToken: 'test-valid-token' });
+  assert.equal(honeyContact.status, 200, 'Filled honeypot answers a silent 200');
+  assert.equal((await honeyContact.json()).success, true);
+  assert.equal((await listMessages()).some((m) => m.email === 'honey@example.com'), false, 'Honeypot contact is not stored');
+  const honeySub = await botPost('/api/newsletter/subscribe', '10.6.1.4', { email: 'honey-sub@example.com', consent: true, website: 'x', formElapsedMs: 5000, turnstileToken: 'test-valid-token' });
+  assert.equal(honeySub.status, 200);
+  assert.equal((await listSubscribers()).some((x) => x.email === 'honey-sub@example.com'), false, 'Honeypot subscription is not stored');
+  assert.equal((await botPost('/api/newsletter/subscribe', '10.6.1.5', { email: 'bot-sub@example.com', consent: true, formElapsedMs: 5000, turnstileToken: 'test-valid-token' })).status, 200);
+  assert.ok((await listSubscribers()).some((x) => x.email === 'bot-sub@example.com'), 'Valid subscription is stored');
+  assert.equal((await botPost('/api/contact', '10.6.2.1', { ...botContact, email: 'nope', formElapsedMs: 5000, turnstileToken: 'test-valid-token' })).status, 400, 'Field validation still runs');
+  // Production server without TURNSTILE_SECRET_KEY: both public forms are closed, the key endpoint reports no site key.
+  const post503 = (url, body) => request(url, { method: 'POST', headers: { ...json, 'x-forwarded-for': '10.7.0.1' }, body: JSON.stringify(body) });
+  const closedContact = await post503('/api/contact', { ...botContact, email: 'closed@example.com', ...botOk() });
+  assert.equal(closedContact.status, 503, 'Production without TURNSTILE_SECRET_KEY closes the contact form');
+  assert.match((await closedContact.json()).error, /Form geçici olarak kullanılamıyor/);
+  assert.equal((await post503('/api/newsletter/subscribe', { email: 'closed@example.com', consent: true, ...botOk() })).status, 503);
+  assert.equal((await listMessages()).some((m) => m.email === 'closed@example.com'), false);
+  assert.match(logs, /TURNSTILE_SECRET_KEY tanımlı değil/, 'Startup warns about the missing secret');
+  assert.deepEqual(await (await request('/api/config')).json(), { turnstileSiteKey: null });
+  const cspProd = (await request('/')).headers.get('content-security-policy') || '';
+  for (const directive of ['script-src', 'frame-src', 'connect-src']) {
+    assert.match(cspProd.split('; ').find((d) => d.startsWith(directive)) || '', /https:\/\/challenges\.cloudflare\.com/, directive + ' allows Cloudflare Turnstile');
+  }
+  // The fake verifier must never be usable in production.
+  const prodFake = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
+    env: { ...process.env, PORT: String(port + 10), NODE_ENV: 'production', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
+      DATABASE_URL: testUrl.href, TURNSTILE_TEST_VERIFIER: '1', ...noR2Env },
+    stdio: 'ignore',
+  });
+  const prodFakeExit = await Promise.race([new Promise((resolve) => prodFake.once('exit', resolve)), delay(30000).then(() => 'timeout')]);
+  if (prodFakeExit === 'timeout') prodFake.kill('SIGTERM');
+  assert.equal(prodFakeExit, 1, 'TURNSTILE_TEST_VERIFIER is refused when NODE_ENV=production');
 
   // Turkish-only: legacy *_en keys are stripped from imported / restored data.
   const legacy = JSON.parse(JSON.stringify(publicJson.data));
@@ -286,8 +348,6 @@ try {
   assert.equal(exported.status, 200);
   assert.ok((await exported.json()).data?.settings, 'Server export contains site data');
 
-  launchMedia();
-  await waitMedia();
   // --- Stage 6: media (R2 is never contacted: the production server has no R2 settings, the test server uses the in-memory store) ---
   const png = (w, h, extra = {}) => sharp({ create: { width: w, height: h, channels: 3, background: '#ff5a1f' } }).png(extra).toBuffer();
   const formWith = (buffer, name, type) => { const f = new FormData(); f.append('file', new Blob([buffer], { type }), name); return f; };
@@ -388,7 +448,7 @@ try {
 
   const ipHeaders = (ip) => ({ ...json, 'x-forwarded-for': ip });
   const contactBody = { name: 'Test', email: 'valid@example.com', subject: 'Konu', message: 'Merhaba' };
-  const post = (url, ip, body) => request(url, { method: 'POST', headers: ipHeaders(ip), body: typeof body === 'string' ? body : JSON.stringify(body) });
+  const post = (url, ip, body) => mediaRequest(url, { method: 'POST', headers: ipHeaders(ip), body: typeof body === 'string' ? body : JSON.stringify({ ...botOk(), ...body }) });
   const badContacts = [
     { ...contactBody, name: 42 }, { ...contactBody, email: 'not-an-email' }, { ...contactBody, name: 'x'.repeat(101) },
     { ...contactBody, email: 'a'.repeat(250) + '@b.co' }, { ...contactBody, subject: 's'.repeat(151) },
@@ -433,7 +493,7 @@ try {
   // CSRF: cross-site browser requests are refused.
   const crossSite = await request('/api/contact', { method: 'POST', headers: { ...ipHeaders('10.5.0.1'), 'sec-fetch-site': 'cross-site' }, body: JSON.stringify(contactBody) });
   assert.equal(crossSite.status, 403);
-  assert.equal((await request('/api/contact', { method: 'POST', headers: { ...ipHeaders('10.5.0.2'), 'sec-fetch-site': 'same-origin' }, body: JSON.stringify(contactBody) })).status, 200);
+  assert.equal((await mediaRequest('/api/contact', { method: 'POST', headers: { ...ipHeaders('10.5.0.2'), 'sec-fetch-site': 'same-origin' }, body: JSON.stringify({ ...contactBody, ...botOk() }) })).status, 200);
 
   // Security headers (the smoke server runs with NODE_ENV=production).
   const headerProbe = await request('/');
@@ -443,7 +503,7 @@ try {
   assert.ok(headerProbe.headers.get('permissions-policy'));
   assert.match(headerProbe.headers.get('strict-transport-security') || '', /max-age=\d+/);
   const csp = headerProbe.headers.get('content-security-policy') || '';
-  assert.match(csp, /script-src 'self'(;|$)/);
+  assert.match(csp, /script-src 'self' https:\/\/challenges\.cloudflare\.com(;|$)/, 'script-src allows only self and Turnstile');
   for (const origin of ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.youtube-nocookie.com', 'www.youtube.com', 'player.vimeo.com', 'open.spotify.com', 'www.instagram.com']) {
     assert.ok(csp.includes(origin), 'CSP allows ' + origin);
   }

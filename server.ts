@@ -120,13 +120,13 @@ if (IS_PROD) SECURITY_HEADERS['Strict-Transport-Security'] = 'max-age=31536000';
 const mediaSource = MEDIA_ORIGIN ? ` ${MEDIA_ORIGIN}` : '';
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' https://challenges.cloudflare.com",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: https:" + mediaSource,
   "media-src 'self' https:" + mediaSource,
-  "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://open.spotify.com https://www.instagram.com",
-  "connect-src 'self'",
+  "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://open.spotify.com https://www.instagram.com https://challenges.cloudflare.com",
+  "connect-src 'self' https://challenges.cloudflare.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -210,6 +210,91 @@ function createRateLimiter(max: number, windowMs: number) {
 const contactRateLimit = createRateLimiter(5, 60 * 60 * 1000);
 const newsletterRateLimit = createRateLimiter(10, 60 * 60 * 1000);
 
+// Bot protection for the public forms: honeypot + minimum fill time + Cloudflare Turnstile.
+// Production without TURNSTILE_SECRET_KEY closes both forms (503); development without keys skips the check.
+// TURNSTILE_TEST_VERIFIER=1 swaps Cloudflare for a fake verifier (token "test-valid-token") for automated tests only.
+const TURNSTILE_SECRET = process.env.TURNSTILE_SECRET_KEY?.trim() || '';
+const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY?.trim() || '';
+const TURNSTILE_TEST_VERIFIER = process.env.TURNSTILE_TEST_VERIFIER === '1';
+if (TURNSTILE_TEST_VERIFIER && IS_PROD) {
+  console.error('TURNSTILE_TEST_VERIFIER yalnızca testler içindir ve NODE_ENV=production iken kullanılamaz.');
+  process.exit(1);
+}
+const TURNSTILE_ENFORCED = TURNSTILE_TEST_VERIFIER || Boolean(TURNSTILE_SECRET);
+if (IS_PROD && !TURNSTILE_SECRET) {
+  console.warn('TURNSTILE_SECRET_KEY tanımlı değil: iletişim ve bülten formları kapalı (503). Kurulum: README → "Cloudflare Turnstile kurulumu".');
+} else if (IS_PROD && !TURNSTILE_SITE_KEY) {
+  console.warn('TURNSTILE_SITE_KEY tanımlı değil: form sayfalarında robot doğrulaması gösterilemez, gönderimler reddedilir.');
+}
+const MIN_FORM_FILL_MS = 2000;
+
+type TurnstileResult = 'ok' | 'failed' | 'unavailable';
+async function verifyTurnstile(token: string, ip: string | undefined): Promise<TurnstileResult> {
+  if (TURNSTILE_TEST_VERIFIER) return token === 'test-valid-token' ? 'ok' : token === 'test-unavailable' ? 'unavailable' : 'failed';
+  try {
+    const params = new URLSearchParams({ secret: TURNSTILE_SECRET, response: token });
+    if (ip) params.set('remoteip', ip);
+    const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      body: params,
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return 'unavailable';
+    const result: any = await response.json();
+    if (result?.success === true) return 'ok';
+    const codes: string[] = Array.isArray(result?.['error-codes']) ? result['error-codes'] : [];
+    // Server-side problems (bad secret, Cloudflare outage) must not look like a bot rejection.
+    if (codes.some((c) => ['internal-error', 'missing-input-secret', 'invalid-input-secret'].includes(c))) {
+      console.error('Turnstile doğrulama hatası:', codes.join(', '));
+      return 'unavailable';
+    }
+    return 'failed';
+  } catch {
+    console.error('Turnstile doğrulaması için Cloudflare servisine ulaşılamadı.');
+    return 'unavailable';
+  }
+}
+
+// Runs before field validation: the honeypot answers a silent success, a closed form answers 503.
+function botGuard(silentSuccessMessage: string) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const honeypot = req.body && typeof req.body === 'object' ? (req.body as any).website : undefined;
+    if (typeof honeypot === 'string' && honeypot.trim() !== '') {
+      return res.json({ success: true, message: silentSuccessMessage });
+    }
+    if (IS_PROD && !TURNSTILE_SECRET) {
+      return res.status(503).json({ error: 'Form geçici olarak kullanılamıyor.' });
+    }
+    next();
+  };
+}
+
+// Runs after field validation (so a typo does not burn the one-time token). Returns false after answering.
+async function passesBotCheck(req: Request, res: Response): Promise<boolean> {
+  const body: any = req.body;
+  const elapsed = body?.formElapsedMs;
+  if (typeof elapsed !== 'number' || !Number.isFinite(elapsed) || elapsed < MIN_FORM_FILL_MS) {
+    res.status(400).json({ error: 'Form çok hızlı gönderildi, lütfen tekrar deneyin.' });
+    return false;
+  }
+  if (!TURNSTILE_ENFORCED) return true;
+  const token = body?.turnstileToken;
+  if (typeof token !== 'string' || !token || token.length > 2048) {
+    res.status(400).json({ error: 'Robot doğrulaması başarısız, lütfen tekrar deneyin.' });
+    return false;
+  }
+  const result = await verifyTurnstile(token, req.ip || req.socket.remoteAddress);
+  if (result === 'unavailable') {
+    res.status(503).json({ error: 'Robot doğrulama hizmetine şu anda ulaşılamıyor, lütfen daha sonra tekrar deneyin.' });
+    return false;
+  }
+  if (result === 'failed') {
+    res.status(400).json({ error: 'Robot doğrulaması başarısız, lütfen tekrar deneyin.' });
+    return false;
+  }
+  return true;
+}
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Auth Middleware
@@ -289,6 +374,11 @@ function publicSiteView(data: SiteData): SiteData {
   if (Array.isArray(view.heroSlides)) view.heroSlides = view.heroSlides.filter((slide: any) => slide?.active !== false);
   return view as SiteData;
 }
+
+// Public client settings (the Turnstile site key is public by design; null disables the widget).
+app.get('/api/config', (_req: Request, res: Response) => {
+  res.json({ turnstileSiteKey: TURNSTILE_SITE_KEY || null });
+});
 
 app.get('/api/site', (_req: Request, res: Response) => {
   const publishedData = store.getPublished();
@@ -637,7 +727,7 @@ app.delete('/api/media/delete', requireAuth, requireMedia, ah(async (req: Reques
 }));
 
 // 8. Contact & Newsletter
-app.post('/api/contact', contactRateLimit, ah(async (req: Request, res: Response) => {
+app.post('/api/contact', contactRateLimit, botGuard('Mesajınız başarıyla iletildi. En kısa sürede dönüş yapılacaktır.'), ah(async (req: Request, res: Response) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const { name: rawName, email: rawEmail, subject: rawSubject, message: rawMessage } = body;
   if ([rawName, rawEmail, rawMessage].some((v) => typeof v !== 'string') ||
@@ -658,6 +748,8 @@ app.post('/api/contact', contactRateLimit, ah(async (req: Request, res: Response
   if (subject.length > 150) return res.status(400).json({ error: 'Konu en fazla 150 karakter olabilir.' });
   if (message.length > 5000) return res.status(400).json({ error: 'Mesaj en fazla 5000 karakter olabilir.' });
 
+  if (!(await passesBotCheck(req, res))) return;
+
   await store.addMessage({ name, email, subject: subject || 'Genel İletişim', message });
 
   return res.json({ success: true, message: 'Mesajınız başarıyla iletildi. En kısa sürede dönüş yapılacaktır.' });
@@ -677,7 +769,7 @@ app.delete('/api/contact/delete', requireAuth, ah(async (req: Request, res: Resp
   res.json({ success: true });
 }));
 
-app.post('/api/newsletter/subscribe', newsletterRateLimit, ah(async (req: Request, res: Response) => {
+app.post('/api/newsletter/subscribe', newsletterRateLimit, botGuard('Bültene kaydınız başarıyla tamamlandı!'), ah(async (req: Request, res: Response) => {
   const body = req.body && typeof req.body === 'object' ? req.body : {};
   const { email: rawEmail, consent } = body;
   const email = typeof rawEmail === 'string' ? rawEmail.trim() : '';
@@ -687,6 +779,8 @@ app.post('/api/newsletter/subscribe', newsletterRateLimit, ah(async (req: Reques
   if (!consent) {
     return res.status(400).json({ error: 'Lütfen KVKK ve iletişim onay kutusunu işaretleyiniz.' });
   }
+
+  if (!(await passesBotCheck(req, res))) return;
 
   if (!(await store.addSubscriber(email))) {
     return res.json({ success: true, message: 'E-posta adresiniz zaten bültenimize kayıtlı. Teşekkürler!' });

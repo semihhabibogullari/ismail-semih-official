@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Mail, Phone, MapPin, Send, CheckCircle2, AlertCircle, Loader2, MessageSquare } from 'lucide-react';
 import { useSite } from '../context/SiteContext';
+import { useTurnstile, TURNSTILE_CONTAINER_CLASS } from '../components/common/Turnstile';
 
 export const ContactPage: React.FC = () => {
   const { data } = useSite();
@@ -20,6 +21,7 @@ export const ContactPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const turnstile = useTurnstile();
 
   // Pre-fill subject if navigated with ?egitim=...
   useEffect(() => {
@@ -44,7 +46,7 @@ export const ContactPage: React.FC = () => {
       const res = await fetch('/api/contact', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, subject, message }),
+        body: JSON.stringify({ name, email, subject, message, ...(await turnstile.botFields()) }),
       });
       const json = await res.json();
       if (res.ok && json.success) {
@@ -60,6 +62,7 @@ export const ContactPage: React.FC = () => {
       setError('Sunucu bağlantı hatası. Lütfen daha sonra tekrar deneyiniz.');
     } finally {
       setIsLoading(false);
+      turnstile.reset();
     }
   };
 
@@ -90,6 +93,7 @@ export const ContactPage: React.FC = () => {
               </h2>
 
               <div className="space-y-5 text-sm">
+                {settings?.contactEmail && (
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[#151520] border border-white/10 flex items-center justify-center text-[#ff5a1f] shrink-0">
                     <Mail className="w-4 h-4" />
@@ -97,14 +101,16 @@ export const ContactPage: React.FC = () => {
                   <div>
                     <span className="text-xs text-gray-400 block mb-0.5">E-posta Adresi</span>
                     <a
-                      href={`mailto:${settings?.contactEmail || 'semihhabibogullari@gmail.com'}`}
+                      href={`mailto:${settings.contactEmail}`}
                       className="text-white hover:text-[#ff5a1f] font-medium transition-colors"
                     >
-                      {settings?.contactEmail || 'semihhabibogullari@gmail.com'}
+                      {settings.contactEmail}
                     </a>
                   </div>
                 </div>
+                )}
 
+                {settings?.contactPhone && (
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[#151520] border border-white/10 flex items-center justify-center text-[#ff5a1f] shrink-0">
                     <Phone className="w-4 h-4" />
@@ -112,13 +118,14 @@ export const ContactPage: React.FC = () => {
                   <div>
                     <span className="text-xs text-gray-400 block mb-0.5">Telefon / Menajerlik</span>
                     <a
-                      href={`tel:${settings?.contactPhone || '+902125550192'}`}
+                      href={`tel:${settings.contactPhone}`}
                       className="text-white hover:text-[#ff5a1f] font-medium transition-colors"
                     >
-                      {settings?.contactPhone || '+90 (212) 555 0192'}
+                      {settings.contactPhone}
                     </a>
                   </div>
                 </div>
+                )}
 
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[#151520] border border-white/10 flex items-center justify-center text-[#ff5a1f] shrink-0">
@@ -147,6 +154,7 @@ export const ContactPage: React.FC = () => {
               <h2 className="text-xl font-bold text-white mb-6">Mesaj Gönderin</h2>
 
               <form onSubmit={handleSubmit} className="space-y-5">
+                <input {...turnstile.honeypotProps} />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
                     <label className="block text-xs font-semibold text-gray-300 mb-2">
@@ -207,6 +215,8 @@ export const ContactPage: React.FC = () => {
                     className="w-full px-4 py-3 rounded-xl bg-[#0b0b0f] border border-white/10 text-white placeholder-gray-500 text-sm focus:outline-none focus:ring-2 focus:ring-[#ff5a1f] resize-none"
                   />
                 </div>
+
+                <div ref={turnstile.containerRef} className={TURNSTILE_CONTAINER_CLASS} />
 
                 {success && (
                   <div className="flex items-center gap-2 p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800/40 text-emerald-400 text-xs">
