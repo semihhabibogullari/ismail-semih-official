@@ -6,6 +6,8 @@
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import cookieParser from 'cookie-parser';
+import compression from 'compression';
+import fs from 'fs';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
@@ -107,6 +109,8 @@ const ah = (fn: AsyncHandler) => (req: Request, res: Response, next: NextFunctio
 
 // Express Middlewares
 app.disable('x-powered-by');
+// gzip/brotli for API and static responses (development keeps the Vite dev server untouched).
+if (IS_PROD) app.use(compression());
 
 // Security headers. The CSP is only sent in production: the Vite dev server needs inline
 // scripts and a websocket for hot reload, which a strict policy would block.
@@ -121,8 +125,8 @@ const mediaSource = MEDIA_ORIGIN ? ` ${MEDIA_ORIGIN}` : '';
 const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self' https://challenges.cloudflare.com",
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' data: https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
   "img-src 'self' data: https:" + mediaSource,
   "media-src 'self' https:" + mediaSource,
   "frame-src https://www.youtube-nocookie.com https://www.youtube.com https://player.vimeo.com https://open.spotify.com https://www.instagram.com https://challenges.cloudflare.com",
@@ -867,7 +871,9 @@ app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
 
 // Anything else (e.g. a database error inside an async handler): never leak details to the client.
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('İstek hatası:', err?.code || err?.name || 'bilinmeyen');
+  // Never log the error message (database errors can echo user data): code/name plus a few stack frames only.
+  const frames = typeof err?.stack === 'string' ? err.stack.split('\n').slice(1, 4).map((l: string) => l.trim()).join(' | ') : '';
+  console.error('İstek hatası:', err?.code || err?.name || 'bilinmeyen', frames);
   if (res.headersSent) return;
   res.status(500).json({ error: 'Sunucu hatası. Lütfen daha sonra tekrar deneyiniz.' });
 });
@@ -909,19 +915,51 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
-    app.use(express.static(distPath));
+    // dist/ sits next to server.ts in development and one level above the bundle (dist-server/server.mjs) in a release.
+    const distPath = [path.resolve(__dirname, 'dist'), path.resolve(__dirname, '..', 'dist')]
+      .find((dir) => fs.existsSync(path.join(dir, 'index.html'))) || path.resolve(__dirname, 'dist');
+    // Hashed build files never change; the HTML shell must always be revalidated (ETag stays on).
+    app.use(express.static(distPath, {
+      index: false,
+      setHeaders: (res, filePath) => {
+        const rel = path.relative(distPath, filePath).split(path.sep).join('/');
+        if (rel.startsWith('assets/')) res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+        else if (rel.startsWith('fonts/')) res.setHeader('Cache-Control', 'public, max-age=2592000');
+        else if (rel === 'index.html') res.setHeader('Cache-Control', 'no-cache');
+      },
+    }));
     app.get('*', (_req: Request, res: Response) => {
+      res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.resolve(distPath, 'index.html'));
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
+  const httpServer = app.listen(PORT, '0.0.0.0', () => {
     console.log(`[İsmail Semih Studio V2] Running at http://0.0.0.0:${PORT}`);
   });
+
+  // Graceful shutdown (Plesk restarts with SIGTERM): stop accepting connections, close the database pool, exit within 10 s.
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`${signal} alındı, sunucu kapatılıyor...`);
+    const forced = setTimeout(() => {
+      console.error('Kapatma 10 sn içinde tamamlanamadı, zorla çıkılıyor.');
+      process.exit(1);
+    }, 10000);
+    forced.unref();
+    httpServer.close(async () => {
+      try { await pool.end(); } catch { /* already closed */ }
+      process.exit(0);
+    });
+    httpServer.closeIdleConnections?.();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 startServer().catch((err) => {
-  console.error('Failed to start server:', err);
+  console.error('Sunucu başlatılamadı:', err?.code || err?.name || 'bilinmeyen hata');
   process.exit(1);
 });

@@ -19,3 +19,8 @@ data/backups/
 # Visitor records (personal data)
 data/messages.json
 data/subscribers.json
+
+# Üretim paketi
+dist-server/
+release/
+!.env.production.example

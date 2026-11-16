@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { SiteData } from '../types';
 import { initialSiteData } from '../data/initialData';
+import { loadSelectableFont } from '../utils/fonts';
 
 export type ThemeMode = 'dark' | 'light';
 
@@ -71,32 +72,14 @@ export function SiteProvider({ children }: { children: ReactNode }) {
     const typography = data.settings?.typography;
     if (!typography) return;
 
-    // Load Google Font if non-standard font is selected
     const headingFont = typography.headingFont || 'Space Grotesk';
     const bodyFont = typography.bodyFont || 'Inter';
 
     const sectionFonts = (data.sections || []).flatMap(section =>
       [section.appearance?.headingFont, section.appearance?.bodyFont]
     ).filter((font): font is string => typeof font === 'string' && font.length > 0);
-    const allowedGoogleFonts = new Set([
-      'Inter', 'Space Grotesk', 'Montserrat', 'Poppins', 'Roboto', 'Open Sans',
-      'Lato', 'Playfair Display', 'Merriweather', 'Oswald', 'DM Sans', 'Source Sans 3',
-    ]);
-    const fontsToLoad = [...new Set([headingFont, bodyFont, ...sectionFonts])]
-      .filter(font => allowedGoogleFonts.has(font));
-
-    if (fontsToLoad.length > 0) {
-      const fontQuery = fontsToLoad.map((f) => `family=${f.replace(/ /g, '+')}:wght@400;600;700`).join('&');
-      const linkId = 'custom-google-fonts';
-      let linkEl = document.getElementById(linkId) as HTMLLinkElement | null;
-      if (!linkEl) {
-        linkEl = document.createElement('link');
-        linkEl.id = linkId;
-        linkEl.rel = 'stylesheet';
-        document.head.appendChild(linkEl);
-      }
-      linkEl.href = `https://fonts.googleapis.com/css2?${fontQuery}&display=swap`;
-    }
+    // Self-hosted fonts: the defaults are declared in src/fonts.css, the others load on demand.
+    [...new Set([headingFont, bodyFont, ...sectionFonts])].forEach(loadSelectableFont);
 
     // Set CSS font family variables
     document.documentElement.style.setProperty('--heading-font', `"${headingFont}", sans-serif`);

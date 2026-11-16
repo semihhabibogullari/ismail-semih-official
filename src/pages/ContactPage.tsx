@@ -127,6 +127,7 @@ export const ContactPage: React.FC = () => {
                 </div>
                 )}
 
+                {settings?.address && (
                 <div className="flex items-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-[#151520] border border-white/10 flex items-center justify-center text-[#ff5a1f] shrink-0">
                     <MapPin className="w-4 h-4" />
@@ -134,10 +135,11 @@ export const ContactPage: React.FC = () => {
                   <div>
                     <span className="text-xs text-gray-400 block mb-0.5">Stüdyo & Çalışma Alanı</span>
                     <span className="text-white font-medium block">
-                      {settings?.address || 'Moda & Kadıköy, İstanbul / Türkiye'}
+                      {settings.address}
                     </span>
                   </div>
                 </div>
+                )}
               </div>
             </div>
 

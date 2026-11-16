@@ -39,6 +39,8 @@ try {
 }
 const testDb = await mysql.createConnection({ ...dbConfig, database: testDbName, charset: 'utf8mb4', timezone: 'Z' });
 
+// SMOKE_BUNDLE=1 runs the esbuild bundle (npm run build:server) instead of tsx, like production does.
+const serverArgs = process.env.SMOKE_BUNDLE === '1' ? ['dist-server/server.mjs'] : ['--import', 'tsx', 'server.ts'];
 const isolatedRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ismail-smoke-'));
 const tmpDir = path.join(isolatedRoot, 'tmp');
 fs.mkdirSync(tmpDir);
@@ -50,7 +52,7 @@ const testPassword = 'local-smoke-password-only-2026!';
 let server;
 let logs = '';
 function launch() {
-  server = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
+  server = spawn(process.execPath, serverArgs, {
     env: { ...process.env, PORT: String(port), NODE_ENV: 'production', TRUST_PROXY: '1', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
       DATABASE_URL: testUrl.href, TMPDIR: tmpDir, TEMP: tmpDir, TMP: tmpDir, ...noR2Env },
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -63,7 +65,7 @@ const mediaPort = 36182;
 const mediaCdn = 'https://cdn.smoke.test';
 let mediaServer;
 function launchMedia() {
-  mediaServer = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
+  mediaServer = spawn(process.execPath, serverArgs, {
     env: { ...process.env, PORT: String(mediaPort), NODE_ENV: 'test', TRUST_PROXY: '1', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
       DATABASE_URL: testUrl.href, TMPDIR: tmpDir, TEMP: tmpDir, TMP: tmpDir, ...noR2Env, MEDIA_STORAGE: 'memory', MEDIA_BASE_URL: mediaCdn,
       TURNSTILE_TEST_VERIFIER: '1', TURNSTILE_SECRET_KEY: '', TURNSTILE_SITE_KEY: '' },
@@ -318,7 +320,7 @@ try {
     assert.match(cspProd.split('; ').find((d) => d.startsWith(directive)) || '', /https:\/\/challenges\.cloudflare\.com/, directive + ' allows Cloudflare Turnstile');
   }
   // The fake verifier must never be usable in production.
-  const prodFake = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
+  const prodFake = spawn(process.execPath, serverArgs, {
     env: { ...process.env, PORT: String(port + 10), NODE_ENV: 'production', ADMIN_USERNAME: testUsername, ADMIN_PASSWORD: testPassword,
       DATABASE_URL: testUrl.href, TURNSTILE_TEST_VERIFIER: '1', ...noR2Env },
     stdio: 'ignore',
@@ -360,7 +362,7 @@ try {
   assert.equal((await request('/api/health')).status, 200, 'Health is unaffected by missing R2 settings');
 
   // The memory-store switch is refused in production.
-  const prodMemory = spawn(process.execPath, ['--import', 'tsx', 'server.ts'], {
+  const prodMemory = spawn(process.execPath, serverArgs, {
     env: { ...process.env, PORT: '36183', NODE_ENV: 'production', MEDIA_STORAGE: 'memory', DATABASE_URL: testUrl.href }, stdio: 'ignore',
   });
   const prodMemoryExit = await new Promise((resolve) => prodMemory.once('exit', resolve));
@@ -504,7 +506,8 @@ try {
   assert.match(headerProbe.headers.get('strict-transport-security') || '', /max-age=\d+/);
   const csp = headerProbe.headers.get('content-security-policy') || '';
   assert.match(csp, /script-src 'self' https:\/\/challenges\.cloudflare\.com(;|$)/, 'script-src allows only self and Turnstile');
-  for (const origin of ['fonts.googleapis.com', 'fonts.gstatic.com', 'www.youtube-nocookie.com', 'www.youtube.com', 'player.vimeo.com', 'open.spotify.com', 'www.instagram.com']) {
+  assert.equal(/googleapis|gstatic/.test(csp), false, 'CSP no longer allows Google Fonts (fonts are self-hosted)');
+  for (const origin of ['www.youtube-nocookie.com', 'www.youtube.com', 'player.vimeo.com', 'open.spotify.com', 'www.instagram.com']) {
     assert.ok(csp.includes(origin), 'CSP allows ' + origin);
   }
   assert.equal((await request('/api/site')).headers.get('x-content-type-options'), 'nosniff');
